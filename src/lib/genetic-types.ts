@@ -123,6 +123,10 @@ export const GENETIC_TYPES: Record<GeneticType, GeneticTypeData> = {
     biome: ["Anomalies temporelles", "Zones entre-deux"],
     characteristic: "Swap — Order & Delay",
     weight: 100,
+    passive: {
+      name: "Synchronisation Chronal",
+      description: "Toutes les compétences ont 1 tour de cooldown en moins (minimum 0)",
+    },
   },
 
   ombre: {

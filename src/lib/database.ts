@@ -21,6 +21,7 @@ export interface Creature {
   };
   desc: string;
   image?: string;
+  geneticType?: string;
   // Star unlock tiers (optional reference)
   starUnlocks?: {
     1: { skillTier?: 1 };

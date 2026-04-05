@@ -1543,9 +1543,12 @@ export function executeSkill(
     applyRoueDuDestinCooldownReset(ctx, targets);
   }
 
-  // Set cooldown
+  // Set cooldown with Synchroniseur bonus (-1 turn, minimum 0)
   const cooldownKey = `${skill.name}_${skill.source}_${attacker.name}`;
-  attacker.skillCooldowns[cooldownKey] = skill.cooldown;
+  const finalCooldown = attacker.creature.geneticType === "synchroniseur" 
+    ? Math.max(0, skill.cooldown - 1) 
+    : skill.cooldown;
+  attacker.skillCooldowns[cooldownKey] = finalCooldown;
 
   return true;
 }
