@@ -425,7 +425,7 @@ export default function BattlePage() {
           } as any);
         }
 
-        console.log("Enemy team generated:", enemyTeam.map(c => `${c.name} (${c.personality}, ${c.geneticType}, ${c.finalStats.rank})`));
+        // console.log("Enemy team generated:", enemyTeam.map(c => `${c.name} (${c.personality}, ${c.geneticType}, ${c.finalStats.rank})`));
 
         const playerTeamWithHP = [...playerTeam];
 
