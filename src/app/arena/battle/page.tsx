@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Rank, CREATURES, PERSONALITIES, PersonalityType, generateRandomPersonality, applyLevelScaling } from "@/lib/database";
 import { rollRandomGeneticType } from "@/lib/genetic-types";
 import { getVarianceRange, BattleStats } from "@/lib/battle";
+import { SimpleCard } from "./CARD_TEMPLATE";
 import { rollRandomTraits, applyTraitStatModifiers } from "@/lib/traits";
 
 interface Disease {
