@@ -22,6 +22,7 @@ export interface Creature {
   desc: string;
   image?: string;
   geneticType?: string;
+  radioactiveCharges?: number; // For Radiant passive corruption
   // Star unlock tiers (optional reference)
   starUnlocks?: {
     1: { skillTier?: 1 };

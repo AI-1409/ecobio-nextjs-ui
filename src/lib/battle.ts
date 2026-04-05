@@ -1262,6 +1262,25 @@ export function executeAttack(
     type: "damage",
   });
 
+  // Radiant passive: accumulate radioactive charges
+  if (attacker.creature.geneticType === "radiant" && damage > 0 && defender.currentHP > 0) {
+    const currentCharges = defender.creature.radioactiveCharges || 0;
+    const newCharges = Math.min(5, currentCharges + 1); // Max 5 charges
+    defender.creature.radioactiveCharges = newCharges;
+    
+    if (newCharges === 1) {
+      log.push({
+        text: `☢️ ${defender.name} est contaminé par radiation!`,
+        type: "info",
+      });
+    } else {
+      log.push({
+        text: `☢️ ${defender.name} accumulate ${newCharges} charges radioactives!`,
+        type: "info",
+      });
+    }
+  }
+
   // Track damage dealt
   attacker.damageDealt = (attacker.damageDealt || 0) + damage;
 

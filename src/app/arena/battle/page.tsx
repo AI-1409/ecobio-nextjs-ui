@@ -327,8 +327,9 @@ function spawnCreatureForBattle(): Creature {
     level: 1,
     currentHP: finalStats.hp,
     maxHP: finalStats.hp,
+    radioactiveCharges: 0,
     diseases: [], // Ephemeral - not saved to localStorage!
-  };
+  } as any; // Cast to any to include radioactiveCharges
 }
 
 export default function BattlePage() {
@@ -397,8 +398,9 @@ export default function BattlePage() {
             maxHP: maxHP,
             position: i + 1,
             hasTriggeredSauvetage: false,
+            radioactiveCharges: 0,
             diseases: []
-          });
+          } as any);
         }
 
         console.log("Player team built:", playerTeam.length, "creatures");
@@ -418,8 +420,9 @@ export default function BattlePage() {
             ...creature,
             position: i + 1,
             hasTriggeredSauvetage: false,
+            radioactiveCharges: 0,
             diseases: []
-          });
+          } as any);
         }
 
         console.log("Enemy team generated:", enemyTeam.map(c => `${c.name} (${c.personality}, ${c.geneticType}, ${c.finalStats.rank})`));
@@ -644,6 +647,30 @@ export default function BattlePage() {
       }
     }
 
+    // Radiant passive: check for radioactive corruption at the start of turn
+    const radioactiveCharges = attacker.radioactiveCharges || 0;
+    if (radioactiveCharges > 0 && attacker.currentHP > 0) {
+      const corruptionChance = radioactiveCharges * 10; // X% where X = charges
+      const isCorrupted = Math.random() * 100 < corruptionChance;
+      
+      if (isCorrupted) {
+        // Find a random ally to attack instead
+        const isEnemy = attacker.owner === "enemy";
+        const teammates = isEnemy 
+          ? newEnemyTeam.filter(c => c.id !== attacker.id && c.currentHP > 0)
+          : newPlayerTeam.filter(c => c.id !== attacker.id && c.currentHP > 0);
+        
+        if (teammates.length > 0) {
+          const randomAlly = teammates[Math.floor(Math.random() * teammates.length)];
+          newLog.push(`☢️ Corruption radiologique! ${attacker.name} attaqua son allié ${randomAlly.name}!`);
+          
+          // Swap target with random ally
+          target = randomAlly;
+          targetTeam = isEnemy ? "enemy" : "player";
+        }
+      }
+    }
+
     const critText = isCrit ? " **CRITIQUE!**" : "";
     const attackerLabel = `${attacker.name} (${attacker.position || '?'} ${attacker.owner === 'player' ? 'Joueur' : 'Adversaire'})`;
     const targetLabel = `${target.name} (${target.position || '?'} ${targetTeam === 'player' ? 'Joueur' : 'Adversaire'})`;
@@ -696,17 +723,45 @@ export default function BattlePage() {
       }
     }
 
-    // Update disease states (decrement remainingTurns) for the current attacker ONLY
+    // Update disease states and radioactive charges for the current attacker ONLY
     if (attacker.owner === "player") {
       const attackerIndex = finalPlayerTeamFinal.findIndex(c => c.id === attacker.id);
       if (attackerIndex !== -1) {
-        const updatedAttacker = updateDiseases([finalPlayerTeamFinal[attackerIndex]])[0];
+        let updatedAttacker = updateDiseases([finalPlayerTeamFinal[attackerIndex]])[0] as any;
+        
+        // Decrement radioactive charges
+        const currentCharges = updatedAttacker.radioactiveCharges || 0;
+        if (currentCharges > 0) {
+          const newCharges = currentCharges - 1;
+          updatedAttacker.radioactiveCharges = newCharges;
+          
+          if (newCharges === 0) {
+            newLog.push(`☢️ ${updatedAttacker.name} n'est plus contaminé par radiation!`);
+          } else {
+            newLog.push(`☢️ ${updatedAttacker.name}: ${newCharges} charges radioactives restantes`);
+          }
+        }
+        
         finalPlayerTeamFinal[attackerIndex] = updatedAttacker;
       }
     } else {
       const attackerIndex = finalEnemyTeamFinal.findIndex(c => c.id === attacker.id);
       if (attackerIndex !== -1) {
-        const updatedAttacker = updateDiseases([finalEnemyTeamFinal[attackerIndex]])[0];
+        let updatedAttacker = updateDiseases([finalEnemyTeamFinal[attackerIndex]])[0] as any;
+        
+        // Decrement radioactive charges
+        const currentCharges = updatedAttacker.radioactiveCharges || 0;
+        if (currentCharges > 0) {
+          const newCharges = currentCharges - 1;
+          updatedAttacker.radioactiveCharges = newCharges;
+          
+          if (newCharges === 0) {
+            newLog.push(`☢️ ${updatedAttacker.name} n'est plus contaminé par radiation!`);
+          } else {
+            newLog.push(`☢️ ${updatedAttacker.name}: ${newCharges} charges radioactives restantes`);
+          }
+        }
+        
         finalEnemyTeamFinal[attackerIndex] = updatedAttacker;
       }
     }

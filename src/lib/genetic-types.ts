@@ -86,6 +86,10 @@ export const GENETIC_TYPES: Record<GeneticType, GeneticTypeData> = {
     biome: ["Zones radiatives", "Centrales abandonnées"],
     characteristic: "Energy drain — Sustain & Drain",
     weight: 100,
+    passive: {
+      name: "Corruption Radiologique",
+      description: "Les attaques accumulent des charges radioactives. Au début du tour de la cible: X% chance d'attaquer un allié (X = charges × 10%)",
+    },
   },
 
   chimere: {
