@@ -967,7 +967,8 @@ export default function BattlePage() {
                   <div className="mt-1.5 pt-1.5 border-t border-blue-600/30">
                     <div className="flex gap-1">
                       <div className="w-6 h-6 bg-blue-600/30 rounded border border-blue-400/50 flex items-center justify-center text-blue-300 text-xs">+</div>
-                      <div className="w-6 h-6 bg-gray-600/30 rounded border border-gray-400/30 flex items-center justify-center text-gray-400 text-xs">-</div>
+                      {/* DEBUG: Commenting - to see if it causes 0 */}
+                      {/* <div className="w-6 h-6 bg-gray-600/30 rounded border border-gray-400/30 flex items-center justify-center text-gray-400 text-xs">-</div> */}
                       {(creature as any).radioactiveCharges && (creature as any).radioactiveCharges > 0 && (
                         <div 
                           className="w-6 h-6 bg-green-600/30 rounded border border-green-400/50 flex items-center justify-center text-green-300 text-xs font-bold"
