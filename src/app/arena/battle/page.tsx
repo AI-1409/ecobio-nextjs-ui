@@ -943,6 +943,9 @@ export default function BattlePage() {
                           {creature.currentHP}/{creature.maxHP}
                         </span>
                       </div>
+                      <div className="text-xs text-gray-300 mt-0.5">
+                        <span className="text-cyan-400 capitalize">🔬 {creature.geneticType || 'unknown'}</span>
+                      </div>
                       {(creature as any).radioactiveCharges && (creature as any).radioactiveCharges > 0 && (
                         <div className="text-xs mt-0.5">
                           <span className="text-green-400 font-bold">
@@ -1037,9 +1040,6 @@ export default function BattlePage() {
                           <span className="text-purple-400">{PERSONALITIES[creature.personality].name} {getPersonalityEmoji(creature.personality)}</span>
                         </div>
                       )}
-                      <div className="text-xs text-gray-300 mt-0.5">
-                        <span className="text-cyan-400 capitalize">🔬 {creature.geneticType || 'unknown'}</span>
-                      </div>
                       <div className="text-xs text-gray-300 mt-0.5">
                         <span className="text-cyan-400 capitalize">🔬 {creature.geneticType || 'unknown'}</span>
                       </div>
