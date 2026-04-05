@@ -938,10 +938,12 @@ export default function BattlePage() {
                           style={{ width: `${(creature.currentHP / creature.maxHP) * 100}%` }}
                         />
                       </div>
-                      <div className="text-xs text-gray-300 mt-0.5 flex justify-between font-medium">
+                      <div className="text-xs text-gray-300 mt-0.5">
                         <span className={`${creature.currentHP / creature.maxHP > 0.5 ? "text-green-400" : creature.currentHP / creature.maxHP > 0.25 ? "text-orange-400" : "text-red-400"}`}>
                           {creature.currentHP}/{creature.maxHP}
                         </span>
+                      </div>
+                      <div className="text-xs text-gray-300 mt-0.5">
                         <span className="text-cyan-400 capitalize">🔬 {creature.geneticType || 'unknown'}</span>
                       </div>
                       {(creature as any).radioactiveCharges && (creature as any).radioactiveCharges > 0 && (
@@ -1028,13 +1030,18 @@ export default function BattlePage() {
                           style={{ width: `${(creature.currentHP / creature.maxHP) * 100}%` }}
                         />
                       </div>
-                      <div className="text-xs text-gray-300 mt-0.5 flex justify-between font-medium">
-                        {creature.personality && PERSONALITIES[creature.personality] && (
-                          <span className="text-purple-400">{PERSONALITIES[creature.personality].name} {getPersonalityEmoji(creature.personality)}</span>
-                        )}
+                      <div className="text-xs text-gray-300 mt-0.5">
                         <span className={`${creature.currentHP / creature.maxHP > 0.5 ? "text-green-400" : creature.currentHP / creature.maxHP > 0.25 ? "text-orange-400" : "text-red-400"}`}>
                           {creature.currentHP}/{creature.maxHP}
                         </span>
+                      </div>
+                      {creature.personality && PERSONALITIES[creature.personality] && (
+                        <div className="text-xs text-gray-300 mt-0.5">
+                          <span className="text-purple-400">{PERSONALITIES[creature.personality].name} {getPersonalityEmoji(creature.personality)}</span>
+                        </div>
+                      )}
+                      <div className="text-xs text-gray-300 mt-0.5">
+                        <span className="text-cyan-400 capitalize">🔬 {creature.geneticType || 'unknown'}</span>
                       </div>
                       <div className="text-xs text-gray-300 mt-0.5">
                         <span className="text-cyan-400 capitalize">🔬 {creature.geneticType || 'unknown'}</span>
