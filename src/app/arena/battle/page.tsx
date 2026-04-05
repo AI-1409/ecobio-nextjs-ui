@@ -712,8 +712,8 @@ export default function BattlePage() {
     }
 
     setBattleState({
-      playerTeam: finalPlayerTeamWithUpdatedDiseases,
-      enemyTeam: finalEnemyTeamWithUpdatedDiseases,
+      playerTeam: finalPlayerTeamFinal,
+      enemyTeam: finalEnemyTeamFinal,
       turn: battleState.turn + 1,
       log: newLog,
       winner: newWinner,
