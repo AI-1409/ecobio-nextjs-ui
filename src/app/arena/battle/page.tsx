@@ -671,45 +671,45 @@ export default function BattlePage() {
     // Move to next attacker in turn order
     let nextIndex = (newIndex + 1) % battleState.turnOrder.length;
 
-    // Apply disease damage to ALL creatures with active diseases at end of turn
-    let playerTeamWithDiseaseDamage = [...finalPlayerTeam];
-    let enemyTeamWithDiseaseDamage = [...finalEnemyTeam];
+    // Apply disease damage ONLY during the current attacker's turn (if they have diseases)
+    let finalPlayerTeamFinal = [...finalPlayerTeam];
+    let finalEnemyTeamFinal = [...finalEnemyTeam];
     
-    // Apply disease damage to all player creatures
-    playerTeamWithDiseaseDamage.forEach(creature => {
-      if (creature.currentHP > 0 && creature.diseases.some(d => d.remainingTurns > 0)) {
-        const diseaseResult = applyDiseaseDamageForCreature(creature, newLog);
-        if (diseaseResult.damage > 0) {
-          const index = playerTeamWithDiseaseDamage.findIndex(c => c.id === creature.id);
+    // Apply disease damage to current attacker if they have active diseases
+    if (attacker.currentHP > 0 && attacker.diseases.some(d => d.remainingTurns > 0)) {
+      const attackerDiseaseResult = applyDiseaseDamageForCreature(attacker, newLog);
+      if (attackerDiseaseResult.damage > 0) {
+        if (attacker.owner === "player") {
+          const index = finalPlayerTeamFinal.findIndex(c => c.id === attacker.id);
           if (index !== -1) {
-            playerTeamWithDiseaseDamage[index] = diseaseResult.updatedCreature;
+            finalPlayerTeamFinal[index] = attackerDiseaseResult.updatedCreature;
           }
-          if (diseaseResult.log.length > 0) {
-            newLog.push(...diseaseResult.log);
+        } else {
+          const index = finalEnemyTeamFinal.findIndex(c => c.id === attacker.id);
+          if (index !== -1) {
+            finalEnemyTeamFinal[index] = attackerDiseaseResult.updatedCreature;
           }
         }
-      }
-    });
-    
-    // Apply disease damage to all enemy creatures
-    enemyTeamWithDiseaseDamage.forEach(creature => {
-      if (creature.currentHP > 0 && creature.diseases.some(d => d.remainingTurns > 0)) {
-        const diseaseResult = applyDiseaseDamageForCreature(creature, newLog);
-        if (diseaseResult.damage > 0) {
-          const index = enemyTeamWithDiseaseDamage.findIndex(c => c.id === creature.id);
-          if (index !== -1) {
-            enemyTeamWithDiseaseDamage[index] = diseaseResult.updatedCreature;
-          }
-          if (diseaseResult.log.length > 0) {
-            newLog.push(...diseaseResult.log);
-          }
+        if (attackerDiseaseResult.log.length > 0) {
+          newLog.push(...attackerDiseaseResult.log);
         }
       }
-    });
+    }
 
-    // Update disease states (decrement remainingTurns) for ALL creatures at end of turn
-    const finalPlayerTeamWithUpdatedDiseases = updateDiseases(playerTeamWithDiseaseDamage);
-    const finalEnemyTeamWithUpdatedDiseases = updateDiseases(enemyTeamWithDiseaseDamage);
+    // Update disease states (decrement remainingTurns) for the current attacker ONLY
+    if (attacker.owner === "player") {
+      const attackerIndex = finalPlayerTeamFinal.findIndex(c => c.id === attacker.id);
+      if (attackerIndex !== -1) {
+        const updatedAttacker = updateDiseases([finalPlayerTeamFinal[attackerIndex]])[0];
+        finalPlayerTeamFinal[attackerIndex] = updatedAttacker;
+      }
+    } else {
+      const attackerIndex = finalEnemyTeamFinal.findIndex(c => c.id === attacker.id);
+      if (attackerIndex !== -1) {
+        const updatedAttacker = updateDiseases([finalEnemyTeamFinal[attackerIndex]])[0];
+        finalEnemyTeamFinal[attackerIndex] = updatedAttacker;
+      }
+    }
 
     setBattleState({
       playerTeam: finalPlayerTeamWithUpdatedDiseases,
