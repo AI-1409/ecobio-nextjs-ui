@@ -944,6 +944,16 @@ export default function BattlePage() {
                         </span>
                         <span className="text-cyan-400 capitalize">🔬 {creature.geneticType}</span>
                       </div>
+                      {(creature as any).radioactiveCharges && (creature as any).radioactiveCharges > 0 && (
+                        <div className="text-xs mt-0.5">
+                          <span className="text-green-400 font-bold">
+                            ☢️ {(creature as any).radioactiveCharges} charges
+                          </span>
+                          <span className="text-green-300 ml-1">
+                            ({(creature as any).radioactiveCharges * 10}%)
+                          </span>
+                        </div>
+                      )}
                       {creature.personality && PERSONALITIES[creature.personality] && (
                         <div className="text-xs text-gray-300 mt-0.5">
                           <span className="text-purple-400">{getPersonalityEmoji(creature.personality)} {PERSONALITIES[creature.personality].name}</span>
@@ -1021,6 +1031,13 @@ export default function BattlePage() {
                       <div className="text-xs text-gray-300 mt-0.5">
                         <span className="text-cyan-400 capitalize">🔬 {creature.geneticType}</span>
                       </div>
+                      {(creature as any).radioactiveCharges && (creature as any).radioactiveCharges > 0 && (
+                        <div className="text-xs mt-0.5">
+                          <span className="text-green-400 font-bold">
+                            ☢️ {(creature as any).radioactiveCharges}c
+                          </span>
+                        </div>
+                      )}
                     </div>
                     <img
                       src={getCreatureImage(creature.creatureId, creature.finalStats.rank, creature.geneticType)}
@@ -1192,6 +1209,32 @@ export default function BattlePage() {
                         </div>
                       );
                     })()}
+                  </div>
+                </div>
+              )}
+
+              {/* Radioactive Charges */}
+              {(selectedCreature as any).radioactiveCharges && (selectedCreature as any).radioactiveCharges > 0 && (
+                <div className="bg-gray-700 dark:bg-gray-800 rounded-xl p-4">
+                  <h4 className="text-green-400 text-sm font-bold mb-3 flex items-center gap-2">
+                    ☢️ CONTAMINATION RADIOACTIVE ({(selectedCreature as any).radioactiveCharges})
+                  </h4>
+                  <div className="space-y-2">
+                    <div className="bg-green-900/50 rounded-lg p-2 border border-green-500/30">
+                      <div className="grid grid-cols-2 gap-2 text-center">
+                        <div>
+                          <p className="text-gray-400 text-xs">Charges actives</p>
+                          <p className="text-green-400 text-lg font-bold">{(selectedCreature as any).radioactiveCharges}</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-400 text-xs">Corruption</p>
+                          <p className="text-green-400 text-lg font-bold">{(selectedCreature as any).radioactiveCharges * 10}%</p>
+                        </div>
+                      </div>
+                      <div className="mt-2 text-center">
+                        <p className="text-gray-400 text-xs">Chance d'attaquer un allié au prochain tour</p>
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
