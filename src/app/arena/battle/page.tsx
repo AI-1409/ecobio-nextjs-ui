@@ -676,7 +676,7 @@ export default function BattlePage() {
     let finalEnemyTeamFinal = [...finalEnemyTeam];
     
     // Apply disease damage to current attacker if they have active diseases
-    if (attacker.currentHP > 0 && attacker.diseases.some(d => d.remainingTurns > 0)) {
+    if (attacker.currentHP > 0 && attacker.diseases.some((d: Disease) => d.remainingTurns > 0)) {
       const attackerDiseaseResult = applyDiseaseDamageForCreature(attacker, newLog);
       if (attackerDiseaseResult.damage > 0) {
         if (attacker.owner === "player") {
