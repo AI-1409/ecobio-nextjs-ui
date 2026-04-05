@@ -942,7 +942,7 @@ export default function BattlePage() {
                         <span className={`${creature.currentHP / creature.maxHP > 0.5 ? "text-green-400" : creature.currentHP / creature.maxHP > 0.25 ? "text-orange-400" : "text-red-400"}`}>
                           {creature.currentHP}/{creature.maxHP}
                         </span>
-                        <span className="text-cyan-400 capitalize">🔬 {creature.geneticType}</span>
+                        <span className="text-cyan-400 capitalize">🔬 {creature.geneticType || 'unknown'}</span>
                       </div>
                       {(creature as any).radioactiveCharges && (creature as any).radioactiveCharges > 0 && (
                         <div className="text-xs mt-0.5">
@@ -1037,7 +1037,7 @@ export default function BattlePage() {
                         </span>
                       </div>
                       <div className="text-xs text-gray-300 mt-0.5">
-                        <span className="text-cyan-400 capitalize">🔬 {creature.geneticType}</span>
+                        <span className="text-cyan-400 capitalize">🔬 {creature.geneticType || 'unknown'}</span>
                       </div>
                       {(creature as any).radioactiveCharges && (creature as any).radioactiveCharges > 0 && (
                         <div className="text-xs mt-0.5">
@@ -1162,7 +1162,7 @@ export default function BattlePage() {
                 {/* Show genetic type in modal */}
                 <div className="bg-gray-700 dark:bg-gray-800 rounded-xl p-3 text-center col-span-2">
                   <p className="text-gray-400 text-xs mb-1">Type Génétique</p>
-                  <p className="text-lg font-bold text-cyan-400 capitalize">🔬 {selectedCreature.geneticType}</p>
+                  <p className="text-lg font-bold text-cyan-400 capitalize">🔬 {selectedCreature.geneticType || 'unknown'}</p>
                 </div>
               </div>
 
