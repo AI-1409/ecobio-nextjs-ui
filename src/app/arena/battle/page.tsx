@@ -966,6 +966,14 @@ export default function BattlePage() {
                     <div className="flex gap-1">
                       <div className="w-6 h-6 bg-blue-600/30 rounded border border-blue-400/50 flex items-center justify-center text-blue-300 text-xs">+</div>
                       <div className="w-6 h-6 bg-gray-600/30 rounded border border-gray-400/30 flex items-center justify-center text-gray-400 text-xs">-</div>
+                      {(creature as any).radioactiveCharges && (creature as any).radioactiveCharges > 0 && (
+                        <div 
+                          className="w-6 h-6 bg-green-600/30 rounded border border-green-400/50 flex items-center justify-center text-green-300 text-xs font-bold"
+                          title={`☢️ ${(creature as any).radioactiveCharges} charges (${(creature as any).radioactiveCharges * 10}% corruption)`}
+                        >
+                          ☢️
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1060,6 +1068,14 @@ export default function BattlePage() {
                     <div className="flex gap-1 justify-end">
                       <div className="w-6 h-6 bg-gray-600/30 rounded border border-gray-400/30 flex items-center justify-center text-gray-400 text-xs">-</div>
                       <div className="w-6 h-6 bg-red-600/30 rounded border border-red-400/50 flex items-center justify-center text-red-300 text-xs">-</div>
+                      {(creature as any).radioactiveCharges && (creature as any).radioactiveCharges > 0 && (
+                        <div 
+                          className="w-6 h-6 bg-green-600/30 rounded border border-green-400/50 flex items-center justify-center text-green-300 text-xs font-bold"
+                          title={`☢️ ${(creature as any).radioactiveCharges} charges (${(creature as any).radioactiveCharges * 10}% corruption)`}
+                        >
+                          ☢️
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
