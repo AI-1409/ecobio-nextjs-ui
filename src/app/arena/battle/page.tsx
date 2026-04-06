@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
@@ -7,1272 +7,396 @@ import { rollRandomGeneticType } from "@/lib/genetic-types";
 import { getVarianceRange, BattleStats } from "@/lib/battle";
 import { SimpleCard } from "./CARD_TEMPLATE";
 import { BattleCleanSection } from "./BATTLE_CLEAN";
-import { rollRandomTraits, applyTraitStatModifiers } from "@/lib/traits";
+
+// Imports des fonctions battle
+import {
+  getEffectiveStats,
+  calculateFinalStats,
+  createBattleCreature,
+  calculateScaledStats,
+  generateIndividualStats,
+  getRankMultiplier
+} from "@/lib/battle";
+
+/* === TYPES SIMPLES === */
 
 interface Disease {
+  remainingTurns: number;
+  pool: number;
   id: string;
-  pool: number; // Damage total de l'attaque qui l'a créée
-  remainingTurns: number; // 4 → 3 → 2 → 1 → 0 (expire)
-  sourceCreatureId: string; // Qui l'a infligée
-  sourceCreatureName: string; // Nom pour le display
 }
 
-interface Creature {
+/* === INTERFACE PROPRE === */
+
+interface BattleCreature {
   id: string;
   name: string;
-  creatureId: string;
-  finalStats: {
-    rank: Rank;
-    hp: number;
-    attack: number;
-    defense: number;
-    speed: number;
-    crit: number;
-  };
-  level: number;
   currentHP: number;
   maxHP: number;
+  geneticType?: string;
+  personality?: PersonalityType;
   position?: number;
-  geneticType: string;
-  personality: PersonalityType;
-  hasTriggeredSauvetage?: boolean;
   diseases: Disease[];
+  radioactiveCharges?: number;
+  finalStats: BattleStats;
+  level: number;
+  creatureId: string;
+  hasTriggeredSauvetage?: boolean;
+  relative?: boolean;
+  grand?: boolean;
+  hostile?: boolean;
 }
 
-interface BattleState {
-  playerTeam: Creature[];
-  enemyTeam: Creature[];
-  turn: number;
-  log: string[];
-  winner: "player" | "enemy" | null;
-  turnOrder: Array<{ id: string; owner: "player" | "enemy" }>;
-  currentAttackerIndex: number;
-}
+/* === FONCTIONS SIMPLIFIÉES === */
 
-// Get the current attacker from the battle state
-const getCurrentAttacker = (battleState: BattleState): Creature | null => {
-  if (battleState.currentAttackerIndex === null || battleState.currentAttackerIndex === undefined) return null;
-  
-  const turnEntry = battleState.turnOrder[battleState.currentAttackerIndex];
-  if (!turnEntry) return null;
-  
-  if (turnEntry.owner === "player") {
-    return battleState.playerTeam.find(c => c.id === turnEntry.id) || null;
-  } else {
-    return battleState.enemyTeam.find(c => c.id === turnEntry.id) || null;
-  }
-};
-
-function getCreatureImage(creatureId: string, rank: Rank, geneticType?: string): string {
-  if (creatureId === "housefly") {
-    const rankSuffix = rank === "S+" ? "S+" : rank;
-    return `/ecobio-nextjs-ui/creatures/fly-rank-${rankSuffix}.png`;
-  }
-  if (creatureId === "ant") {
-    const rankSuffix = rank === "S+" ? "S+" : rank;
-    return `/ecobio-nextjs-ui/creatures/ant_rank_${rankSuffix}.png`;
-  }
-  if (creatureId === "honeybee") {
-    const rankSuffix = rank === "S+" ? "S+" : rank;
-    return `/ecobio-nextjs-ui/creatures/bee-rank-${rankSuffix}.png`;
-  }
-  if (creatureId === "spider_mutant") {
-    return "/ecobio-nextjs-ui/images/creatures/spider_mutant_e.png";
-  }
-  if (creatureId === "ravaryn" && geneticType) {
-    const normalizedType = geneticType.toLowerCase().replace("é", "e").replace("è", "e");
-    return `/ecobio-nextjs-ui/images/creatures/ravaryn_${normalizedType}_e.png`;
-  }
-  if (creatureId === "polyops") {
-    return "/ecobio-nextjs-ui/images/creatures/polyops.png";
-  }
-  if (creatureId === "gravaille") {
-    return "/ecobio-nextjs-ui/images/creatures/gravaille.png";
-  }
-  if (creatureId === "maworm") {
-    return "/ecobio-nextjs-ui/images/creatures/maworm.png";
-  }
-  if (creatureId === "cornegrive") {
-    return "/ecobio-nextjs-ui/images/creatures/cornegrive.png";
-  }
-  if (creatureId === "oxydrabe") {
-    return "/ecobio-nextjs-ui/images/creatures/oxydrabe.png";
-  }
-  if (creatureId === "verdogre") {
-    return "/ecobio-nextjs-ui/images/creatures/verdogre.png";
-  }
-  return "/ecobio-nextjs-ui/images/creatures/spider_mutant_e.png";
-}
-
-function calculateDamage(attacker: Creature, defender: Creature, isCrit: boolean): number {
-  const multiplier = isCrit ? 2 : 1;
-  const rawDamage = attacker.finalStats.attack * multiplier - defender.finalStats.defense * 0.5;
-  return Math.max(1, Math.floor(rawDamage));
-}
-
-function isCriticalHit(crit: number): boolean {
-  return Math.random() * 100 < (crit / 10);
-}
-
-function getPersonalityEmoji(personality?: PersonalityType): string {
-  const emojiMap: Record<PersonalityType, string> = {
-    agressif: "🦁",
-    protecteur: "🛡️",
-    rapide: "💨",
-    stratège: "❤️",
-    précis: "🎯",
-    mystérieux: "🌙"
-  };
-  return personality ? emojiMap[personality] : "";
-}
-
-// Handle Resilient Sauvetage passive ability
-function handleResilientSauvetage(
-  team: Creature[], 
-  teamLog: string[], 
-  teamName: "player" | "enemy"
-): Creature[] {
-  // Find resilient creatures in the team
-  const resilients = team.filter(c => 
-    c.currentHP > 0 && 
-    c.geneticType?.toLowerCase() === "resilient"
-  );
-
-  if (resilients.length === 0) return team;
-
-  // Find creatures that just dropped below 25% HP (and didn't already trigger)
-  const creaturesInDanger = team.filter(c => {
-    const hpPercent = c.currentHP / c.maxHP;
-    return hpPercent < 0.25 && hpPercent > 0 && !c.hasTriggeredSauvetage && c.currentHP > 0;
-  });
-
-  if (creaturesInDanger.length === 0) return team;
-
-  // Get resilients sorted by speed (highest first)
-  const resilientsSorted = [...resilients].sort((a, b) => b.finalStats.speed - a.finalStats.speed);
-  
-  // Get creatures in danger sorted by position (lowest first = highest priority target)
-  const creaturesSorted = [...creaturesInDanger].sort((a, b) => (a.position || 0) - (b.position || 0));
-
-  const newTeam = [...team];
-  const swapLog: string[] = [];
-
-  // Perform swaps one-to-one, excluding self-swaps
-  const maxSwaps = Math.min(resilientsSorted.length, creaturesSorted.length);
-  for (let i = 0; i < maxSwaps; i++) {
-    const creature = creaturesSorted[i];
-    
-    // Filter out the creature who needs saving from available resilients
-    const availableResilients = resilientsSorted.filter(r => r.id !== creature.id);
-    
-    if (availableResilients.length === 0) break; // No resilients available to save this creature
-    
-    const resilient = availableResilients[i % availableResilients.length];
-    const resilientPos = resilient.position || 0;
-    const creaturePos = creature.position || 0;
-
-    // Update positions in newTeam
-    const resilientIndex = newTeam.findIndex(c => c.id === resilient.id);
-    const creatureIndex = newTeam.findIndex(c => c.id === creature.id);
-    
-    if (resilientIndex !== -1 && creatureIndex !== -1) {
-      newTeam[resilientIndex] = { ...resilient, position: creaturePos };
-      newTeam[creatureIndex] = { ...creature, position: resilientPos, hasTriggeredSauvetage: true };
-      
-      swapLog.push(
-        `${resilient.name} (Resilient) utilise Sauvetage → échange position ${resilientPos}↔${creaturePos} avec ${creature.name}`
-      );
-    }
-  }
-
-  if (swapLog.length > 0) {
-    teamLog.push(`${teamName === "player" ? "🛡️ JOUEUR" : "⚔️ ADV"} Sauvetage activé:`, ...swapLog);
-  }
-
-  return newTeam;
-}
-
-// Pathogène disease management
-function createDisease(attacker: Creature, damage: number): Disease {
-  return {
-    id: `disease-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-    pool: damage,
-    remainingTurns: 4,
-    sourceCreatureId: attacker.id,
-    sourceCreatureName: attacker.name
-  };
-}
-
-
-
-function updateDiseases(team: Creature[]): Creature[] {
-  return team.map(creature => {
-    // Remove expired diseases and decrement remaining turns
-    const activeDiseases = creature.diseases
-      .map(disease => ({
-        ...disease,
-        remainingTurns: disease.remainingTurns - 1
-      }))
-      .filter(disease => disease.remainingTurns > 0);
-    
-    return {
-      ...creature,
-      diseases: activeDiseases
-    };
-  });
-}
-
-function applyDiseaseDamage(team: Creature[], damage: number): Creature[] {
-  return team.map(creature => ({
-    ...creature,
-    currentHP: Math.max(0, creature.currentHP - damage)
-  }));
-}
-
-// Rarity roll for enemy creatures (like hunting)
-function rollRarity(): Rank {
-  const dist: { rank: Rank; weight: number }[] = [
-    { rank: "E", weight: 8175 },
-    { rank: "D", weight: 1000 },
-    { rank: "C", weight: 600 },
-    { rank: "B", weight: 150 },
-    { rank: "A", weight: 50 },
-    { rank: "S", weight: 20 },
-    { rank: "S+", weight: 5 },
-  ];
-  const totalWeight = dist.reduce((sum, item) => sum + item.weight, 0);
-  const roll = Math.random() * totalWeight;
-  let cum = 0;
-  for (const item of dist) {
-    cum += item.weight;
-    if (roll < cum) return item.rank;
-  }
-  return "E";
-}
-
-// Spawn ephemeral creature for battle (like hunting, no persistence)
-function spawnCreatureForBattle(): Creature {
-  const creaturePool = ["ravaryn", "polyops", "gravaille", "maworm", "cornegrive", "oxydrabe", "verdogre"];
-  const creatureId = creaturePool[Math.floor(Math.random() * creaturePool.length)];
-  const creature = CREATURES[creatureId];
-
-  if (!creature) {
-    console.error("Creature reference is undefined!");
-    throw new Error("Failed to spawn creature");
-  }
-
-  // Roll random rank (like hunting)
-  const rank: Rank = rollRarity();
-
-  // Get variance range based on rank
-  let [minVar, maxVar] = getVarianceRange(rank);
-
-  // Variance RNG: Stats variation based on rank (like hunting)
-  const hpVariance = minVar + Math.random() * (maxVar - minVar);
-  const atkVariance = minVar + Math.random() * (maxVar - minVar);
-  const defVariance = minVar + Math.random() * (maxVar - minVar);
-  const spdVariance = minVar + Math.random() * (maxVar - minVar);
-  const critVariance = minVar + Math.random() * (maxVar - minVar);
-
-  // Stats POST-variance ONLY (variance RNG only)
-  const varianceStats: BattleStats = {
-    hp: Math.max(1, Math.floor(creature.baseStats.hp * hpVariance)),
-    attack: Math.max(1, Math.floor(creature.baseStats.attack * atkVariance)),
-    defense: Math.max(1, Math.floor(creature.baseStats.defense * defVariance)),
-    speed: Math.max(1, Math.floor(creature.baseStats.speed * spdVariance)),
-    crit: Math.max(1, Math.floor(creature.baseStats.crit * critVariance)),
-    rank,
-  };
-
-  // Generate random personality (RNG!)
-  const personality = generateRandomPersonality();
-
-  // Roll random genetic type
+// Fonction simple pour créer une créature aléatoire
+const spawnCreatureForBattle = (): BattleCreature => {
+  // Générer une créature aléatoire simple
+  const rank: Rank = Math.random() < 0.95 ? "E" : Math.random() < 0.98 ? "D" : Math.random() < 0.99 ? "C" : Math.random() < 0.997 ? "B" : "A";
+  const personality: PersonalityType = ["agressif", "protecteur", "rapide", "stratège", "précis", "mystérieux"][Math.floor(Math.random() * 6)] as PersonalityType;
   const geneticType = rollRandomGeneticType();
-
-  // Roll random traits based on rank
-  const traitIds = rollRandomTraits(rank);
-
-  // Apply personality-based level scaling (level 1 = no scaling, like hunting spawn)
-  const scaledStats = applyLevelScaling({ ...varianceStats }, 1, personality);
-
-  // Apply trait stat modifiers (level-dependent scaling, like hunting)
-  const { modifiedStats: traitStats } = applyTraitStatModifiers(
-    {
-      hp: scaledStats.hp,
-      attack: scaledStats.attack,
-      defense: scaledStats.defense,
-      speed: scaledStats.speed,
-      crit: scaledStats.crit,
-    },
-    traitIds,
-    1 // Start at level 1 (ephemeral creatures don't grow)
-  );
-
-  // Final stats with personality scaling + trait modifications
-  const finalStats: BattleStats = {
-    hp: traitStats.hp,
-    attack: traitStats.attack,
-    defense: traitStats.defense,
-    speed: traitStats.speed,
-    crit: traitStats.crit,
-    rank,
-  };
-
+  
+  const baseStats = generateIndividualStats(rank as any);
+  const finalStats = getEffectiveStats({...baseStats, rank} as any);
+  
+  const hp = Math.floor(baseStats.hp * getRankMultiplier(rank));
+  
   return {
     id: `enemy-${Math.random().toString(36).substr(2, 9)}`,
-    name: creature.name,
-    creatureId: creature.id,
+    name: `Creature ${geneticType}`,
+    creatureId: 'housefly', // pour tests
     geneticType,
     personality,
     finalStats,
     level: 1,
-    currentHP: finalStats.hp,
-    maxHP: finalStats.hp,
+    currentHP: hp,
+    maxHP: hp,
+    diseases: [],
     radioactiveCharges: 0,
-    diseases: [], // Ephemeral - not saved to localStorage!
-  } as any; // Cast to any to include radioactiveCharges
+    hasTriggeredSauvetage: false,
+    relative: true,
+    grand: false,
+    hostile: true
+  };
+};
+
+// Fonction simple pour calculer la distance
+const calculateDistance = (_attacker: BattleCreature, _defender: BattleCreature): number => {
+  return 1; // Distance simple pour le moment
+};
+
+// Fonction simple pour générer HP réaliste
+const generateRealisticHP = (stats: any): number => {
+  const baseHP = stats.hp || 100;
+  const randomVariance = Math.floor(Math.random() * (baseHP * 0.2)) - (baseHP * 0.1);
+  return Math.max(1, baseHP + randomVariance);
+};
+
+// Fonction simple pour les images de créatures
+const getCreatureImage = (creatureId: string, rank: string = "E", geneticType?: string): string => {
+  // Pour le moment, retourne une image par défaut
+  return "/ecobio-nextjs-ui/creatures/unknown.png";
+};
+
+interface BattleState {
+  playerTeam: BattleCreature[];
+  enemyTeam: BattleCreature[];
+  turn: number;
+  log: string[];
+  winner: "player" | "enemy" | null;
+  turnOrder: BattleCreature[];
+  currentAttackerIndex: number;
 }
 
-export default function BattlePage() {
+interface DamageNumber {
+  id: string;
+  damage: number;
+}
+
+/* === FONCTIONS UTILITAIRES === */
+
+const getPersonalityEmoji = (personality: PersonalityType): string => {
+  const emojis: Record<PersonalityType, string> = {
+    agressif: "🦁",
+    protecteur: "🛡️", 
+    rapide: "⚡",
+    stratège: "♟️",
+    précis: "🎯",
+    mystérieux: "?"
+  };
+  return emojis[personality] || "?";
+};
+
+/* === HOOKS === */
+
+function useBattleState() {
   const [battleState, setBattleState] = useState<BattleState | null>(null);
+  const [currentAttacker, setCurrentAttacker] = useState<BattleCreature | null>(null);
+  const [selectedCreature, setSelectedCreature] = useState<BattleCreature | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [selectedCreature, setSelectedCreature] = useState<Creature | null>(null);
-  const [damageNumbers, setDamageNumbers] = useState<Array<{ id: string; damage: number; isCrit: boolean; x: number; y: number }>>([]);
+  const [damageNumbers, setDamageNumbers] = useState<DamageNumber[]>([]);
+  const [showLogs, setShowLogs] = useState(false);
 
+  return {
+    battleState,
+    setBattleState,
+    currentAttacker,
+    setCurrentAttacker,
+    selectedCreature,
+    setSelectedCreature,
+    isProcessing,
+    setIsProcessing,
+    damageNumbers,
+    setDamageNumbers,
+    showLogs,
+    setShowLogs
+  };
+}
+
+/* === COMPOSANT PRINCIPAL === */
+
+export default function BattlePage() {
+  const {
+    battleState,
+    setBattleState,
+    currentAttacker,
+    setCurrentAttacker,
+    selectedCreature,
+    setSelectedCreature,
+    isProcessing,
+    setIsProcessing,
+    damageNumbers,
+    setDamageNumbers,
+    showLogs,
+    setShowLogs
+  } = useBattleState();
+
+  // Initialiser la bataille
   useEffect(() => {
-    const initBattle = async () => {
-      if (typeof window === "undefined") return;
-
-      try {
-        const teamIdsJson = sessionStorage.getItem("battle-team");
-        if (!teamIdsJson) {
-          setError("Aucune équipe trouvée. Redirection vers la sélection...");
-          setTimeout(() => window.location.href = "/arena/training", 1500);
-          return;
-        }
-
-        const teamIds = JSON.parse(teamIdsJson) as string[];
-        console.log("Team IDs loaded:", teamIds);
-
-        const saved = localStorage.getItem("ecobio-collection");
-        if (!saved) {
-          setError("Collection vide. Redirection vers l'home...");
-          setTimeout(() => window.location.href = "/", 1500);
-          return;
-        }
-
-        const collection = JSON.parse(saved) as any[];
-        console.log("Collection loaded:", collection.length, "creatures");
-
-        const playerTeam: Creature[] = [];
-        
-        for (let i = 0; i < teamIds.length; i++) {
-          const id = teamIds[i];
-          const c = collection.find((item: any) => item.id === id);
-          
-          if (!c) {
-            console.error(`Creature with id ${id} not found`);
-            continue;
-          }
-
-          const stats = c.finalStats || c.customStats || c.baseStats || c.baseStats;
-          const hp = c.currentHP || c.maxHP || stats?.hp || 100;
-          const maxHP = c.maxHP || stats?.hp || 100;
-
-          playerTeam.push({
-            id: c.id,
-            name: c.name,
-            creatureId: c.creatureId,
-            geneticType: c.geneticType || "resilient", // Default fallback
-            personality: c.personality || generateRandomPersonality(), // Default fallback
-            finalStats: {
-              rank: stats?.rank || c.rank || "E",
-              hp: maxHP,
-              attack: stats?.attack || c.baseStats?.attack || 10,
-              defense: stats?.defense || c.baseStats?.defense || 5,
-              speed: stats?.speed || c.baseStats?.speed || 10,
-              crit: stats?.crit || c.baseStats?.crit || 5
-            },
-            level: c.level || c.customStats?.level || 1,
-            currentHP: hp,
-            maxHP: maxHP,
-            position: i + 1,
-            hasTriggeredSauvetage: false,
-            radioactiveCharges: 0,
-            diseases: []
-          } as any);
-        }
-
-        console.log("Player team built:", playerTeam.length, "creatures");
-
-        if (playerTeam.length !== 5) {
-          setError(`Équipe incomplète (${playerTeam.length}/5). Redirection...`);
-          setTimeout(() => window.location.href = "/arena/training", 1500);
-          return;
-        }
-
-        // Generate enemy team (5 creatures) - ephemeral creatures with full RNG like hunting
-        const enemyTeam: Creature[] = [];
-
-        for (let i = 0; i < 5; i++) {
-          const creature = spawnCreatureForBattle();
-          enemyTeam.push({
-            ...creature,
-            position: i + 1,
-            hasTriggeredSauvetage: false,
-            radioactiveCharges: 0,
-            diseases: []
-          } as any);
-        }
-
-        // console.log("Enemy team generated:", enemyTeam.map(c => `${c.name} (${c.personality}, ${c.geneticType}, ${c.finalStats.rank})`));
-
-        const playerTeamWithHP = [...playerTeam];
-
-        // Create initial turn order based on speed (fastest first, 50/50 tiebreaker)
-        const allCreaturesWithOwner = [
-          ...playerTeamWithHP.map(c => ({ ...c, owner: "player" as const })),
-          ...enemyTeam.map(c => ({ ...c, owner: "enemy" as const }))
-        ];
-
-        // Sort by speed, with random tiebreaker for equal speeds
-        allCreaturesWithOwner.sort((a, b) => {
-          if (b.finalStats.speed !== a.finalStats.speed) {
-            return b.finalStats.speed - a.finalStats.speed;
-          }
-          // Same speed: 50% random
-          return Math.random() - 0.5;
-        });
-
-        const turnOrder = allCreaturesWithOwner.map(c => ({
-          id: c.id,
-          owner: c.owner
-        }));
-
-        setBattleState({
-          playerTeam: playerTeamWithHP,
-          enemyTeam,
-          turn: 1,
-          log: ["⚔️ Combat commencé!"],
-          winner: null,
-          turnOrder,
-          currentAttackerIndex: 0
-        });
-      } catch (err) {
-        console.error("Battle initialization error:", err);
-        setError(`Erreur: ${err instanceof Error ? err.message : String(err)}`);
-      }
-    };
-
-    initBattle();
+    if (!battleState) {
+      initializeBattle();
+    }
   }, []);
 
-  const processTurn = () => {
-    if (!battleState || isProcessing || battleState.winner) return;
+  // Équipe des joueurs depuis localStorage
+  const playerTeam = (typeof window !== 'undefined' && localStorage.getItem('battleTeam')) 
+    ? JSON.parse(localStorage.getItem('battleTeam') || '[]')
+    : [];
 
-    setIsProcessing(true);
-
-    const newLog = [...battleState.log];
-    let newPlayerTeam = [...battleState.playerTeam];
-    let newEnemyTeam = [...battleState.enemyTeam];
-    let newWinner: "player" | "enemy" | null = null;
-    let newIndex = battleState.currentAttackerIndex;
-
-    // Find the next alive creature in the turn order
-    let attacker: any = null;
-    let attackerFound = false;
-    let attempts = 0;
-    const maxAttempts = battleState.turnOrder.length || 20; // Prevent infinite loop
-
-    while (attempts < maxAttempts && !attackerFound) {
-      const turnEntry = battleState.turnOrder[newIndex];
-      
-      if (turnEntry.owner === "player") {
-        const creature = newPlayerTeam.find(c => c.id === turnEntry.id);
-        if (creature && creature.currentHP > 0) {
-          attacker = { ...creature, owner: "player" as const };
-          attackerFound = true;
-        }
-      } else {
-        const creature = newEnemyTeam.find(c => c.id === turnEntry.id);
-        if (creature && creature.currentHP > 0) {
-          attacker = { ...creature, owner: "enemy" as const };
-          attackerFound = true;
-        }
-      }
-
-      if (!attackerFound) {
-        newIndex = (newIndex + 1) % battleState.turnOrder.length;
-        attempts++;
-      }
+  // Création équipe ennemie aléatoire (5 créatures)
+  const spawnRandomEnemyTeam = (): BattleCreature[] => {
+    const enemies: BattleCreature[] = [];
+    for (let i = 1; i <= 5; i++) {
+      const creature = spawnCreatureForBattle();
+      enemies.push(creature);
     }
-
-    // If no alive attacker found, someone won
-    if (!attackerFound) {
-      const alivePlayers = newPlayerTeam.filter(c => c.currentHP > 0).length;
-      const aliveEnemies = newEnemyTeam.filter(c => c.currentHP > 0).length;
-      newWinner = alivePlayers > 0 ? "player" : "enemy";
-      
-      setBattleState({
-        playerTeam: newPlayerTeam,
-        enemyTeam: newEnemyTeam,
-        turn: battleState.turn + 1,
-        log: newLog,
-        winner: newWinner,
-        turnOrder: battleState.turnOrder,
-        currentAttackerIndex: newIndex
-      });
-      setIsProcessing(false);
-      return;
-    }
-
-    // Determine target based on who attacks
-    let target: any;
-    let targetTeam: "player" | "enemy";
-
-    if (attacker.owner === "player") {
-      // Player attacks: target based on genetic type
-      const isOmbre = attacker.geneticType?.toLowerCase() === "ombre";
-      const sortedEnemies = [...newEnemyTeam].sort((a, b) => {
-        if (isOmbre) {
-          // Ombre: inverted order (5→4→3→2→1)
-          return (b.position || 0) - (a.position || 0);
-        } else {
-          // Normal: standard order (1→2→3→4→5)
-          return (a.position || 0) - (b.position || 0);
-        }
-      });
-      const aliveEnemies = sortedEnemies.filter(c => c.currentHP > 0);
-      if (aliveEnemies.length === 0) {
-        newWinner = "player";
-        setBattleState({
-          playerTeam: newPlayerTeam,
-          enemyTeam: newEnemyTeam,
-          turn: battleState.turn + 1,
-          log: newLog,
-          winner: newWinner,
-          turnOrder: battleState.turnOrder,
-          currentAttackerIndex: newIndex
-        });
-        setIsProcessing(false);
-        return;
-      }
-      target = aliveEnemies[0]; // First alive by order
-      targetTeam = "enemy";
-    } else {
-      // Enemy attacks: target based on genetic type
-      const isOmbre = attacker.geneticType?.toLowerCase() === "ombre";
-      const sortedPlayers = [...newPlayerTeam].sort((a, b) => {
-        if (isOmbre) {
-          // Ombre: inverted order (5→4→3→2→1)
-          return (b.position || 0) - (a.position || 0);
-        } else {
-          // Normal: standard order (1→2→3→4→5)
-          return (a.position || 0) - (b.position || 0);
-        }
-      });
-      const alivePlayers = sortedPlayers.filter(c => c.currentHP > 0);
-      if (alivePlayers.length === 0) {
-        newWinner = "enemy";
-        setBattleState({
-          playerTeam: newPlayerTeam,
-          enemyTeam: newEnemyTeam,
-          turn: battleState.turn + 1,
-          log: newLog,
-          winner: newWinner,
-          turnOrder: battleState.turnOrder,
-          currentAttackerIndex: newIndex
-        });
-        setIsProcessing(false);
-        return;
-      }
-      target = alivePlayers[0]; // First alive by order
-      targetTeam = "player";
-    }
-
-    const isCrit = isCriticalHit(attacker.finalStats.crit);
-    const damage = calculateDamage(attacker, target, isCrit);
-
-    // Show damage number
-    setDamageNumbers(prev => [...prev, {
-      id: `damage-${Date.now()}`,
-      damage,
-      isCrit,
-      x: Math.random() * 50 - 25,
-      y: Math.random() * 20 - 10
-    }]);
-
-    setTimeout(() => {
-      setDamageNumbers(prev => prev.filter(d => d.id !== `damage-${Date.now()}`));
-    }, 1500);
-
-    // Apply damage to target team (Pathogène: NO DIRECT DAMAGE + INFECTION)
-    if (targetTeam === "enemy") {
-      const targetIndex = newEnemyTeam.findIndex(c => c.id === target.id);
-      let updatedTarget = { ...target, currentHP: Math.max(0, target.currentHP - (attacker.geneticType?.toLowerCase() === "pathogene" ? 0 : damage)) };
-      
-      // Check if attacker is Pathogène and apply disease to SINGLE target
-      if (attacker.geneticType?.toLowerCase() === "pathogene" && damage > 0 && updatedTarget.currentHP > 0) {
-        const disease = createDisease(attacker, damage);
-        const currentDiseases = updatedTarget.diseases || [];
-        updatedTarget = { ...updatedTarget, diseases: [...currentDiseases, disease] };
-        newLog.push(`🧬 ${attacker.name} inflige maladie à ${updatedTarget.name}`);
-      }
-      
-      newEnemyTeam[targetIndex] = updatedTarget;
-      
-      // Check if enemy team is defeated
-      const stillAliveEnemies = newEnemyTeam.filter(c => c.currentHP > 0);
-      if (stillAliveEnemies.length === 0) {
-        newWinner = "player";
-      }
-    } else {
-      const targetIndex = newPlayerTeam.findIndex(c => c.id === target.id);
-      let updatedTarget = { ...target, currentHP: Math.max(0, target.currentHP - (attacker.geneticType?.toLowerCase() === "pathogene" ? 0 : damage)) };
-      
-      // Check if attacker is Pathogène and apply disease to SINGLE target  
-      if (attacker.geneticType?.toLowerCase() === "pathogene" && damage > 0 && updatedTarget.currentHP > 0) {
-        const disease = createDisease(attacker, damage);
-        const currentDiseases = updatedTarget.diseases || [];
-        updatedTarget = { ...updatedTarget, diseases: [...currentDiseases, disease] };
-        newLog.push(`🧬 ${attacker.name} inflige maladie à ${updatedTarget.name}`);
-      }
-      
-      newPlayerTeam[targetIndex] = updatedTarget;
-      
-      // Check if player team is defeated
-      const stillAlivePlayers = newPlayerTeam.filter(c => c.currentHP > 0);
-      if (stillAlivePlayers.length === 0) {
-        newWinner = "enemy";
-      }
-    }
-
-    // Radiant passive: check for radioactive corruption at the start of turn
-    const radioactiveCharges = attacker.radioactiveCharges || 0;
-    if (radioactiveCharges > 0 && attacker.currentHP > 0) {
-      const corruptionChance = radioactiveCharges * 10; // X% where X = charges
-      const isCorrupted = Math.random() * 100 < corruptionChance;
-      
-      if (isCorrupted) {
-        // Find a random ally to attack instead
-        const isEnemy = attacker.owner === "enemy";
-        const teammates = isEnemy 
-          ? newEnemyTeam.filter(c => c.id !== attacker.id && c.currentHP > 0)
-          : newPlayerTeam.filter(c => c.id !== attacker.id && c.currentHP > 0);
-        
-        if (teammates.length > 0) {
-          const randomAlly = teammates[Math.floor(Math.random() * teammates.length)];
-          newLog.push(`☢️ Corruption radiologique! ${attacker.name} attaqua son allié ${randomAlly.name}!`);
-          
-          // Swap target with random ally
-          target = randomAlly;
-          targetTeam = isEnemy ? "enemy" : "player";
-        }
-      }
-    }
-
-    const critText = isCrit ? " **CRITIQUE!**" : "";
-    const attackerLabel = `${attacker.name} (${attacker.position || '?'} ${attacker.owner === 'player' ? 'Joueur' : 'Adversaire'})`;
-    const targetLabel = `${target.name} (${target.position || '?'} ${targetTeam === 'player' ? 'Joueur' : 'Adversaire'})`;
-    newLog.push(`${attackerLabel} → ${targetLabel}: ${damage} dégâts${critText}`);
-
-    // Reset Sauvetage trigger for creatures that healed back above 25%
-    const resetSauvetageTrigger = (team: Creature[]) => {
-      return team.map(c => {
-        const hpPercent = c.currentHP / c.maxHP;
-        if (hpPercent > 0.25 && c.hasTriggeredSauvetage) {
-          return { ...c, hasTriggeredSauvetage: false };
-        }
-        return c;
-      });
-    };
-
-    // Apply Sauvetage passive ability
-    const playerTeamAfterSauvetage = handleResilientSauvetage(newPlayerTeam, newLog, "player");
-    const enemyTeamAfterSauvetage = handleResilientSauvetage(newEnemyTeam, newLog, "enemy");
-
-    // Reset Sauvetage triggers after checking
-    const finalPlayerTeam = resetSauvetageTrigger(playerTeamAfterSauvetage);
-    const finalEnemyTeam = resetSauvetageTrigger(enemyTeamAfterSauvetage);
-
-    // Move to next attacker in turn order
-    let nextIndex = (newIndex + 1) % battleState.turnOrder.length;
-
-    // Apply disease damage ONLY during the current attacker's turn (if they have diseases)
-    let finalPlayerTeamFinal = [...finalPlayerTeam];
-    let finalEnemyTeamFinal = [...finalEnemyTeam];
-    
-    // Apply disease damage to current attacker if they have active diseases
-    if (attacker.currentHP > 0 && attacker.diseases.some((d: Disease) => d.remainingTurns > 0)) {
-      const attackerDiseaseResult = applyDiseaseDamageForCreature(attacker, newLog);
-      if (attackerDiseaseResult.damage > 0) {
-        if (attacker.owner === "player") {
-          const index = finalPlayerTeamFinal.findIndex(c => c.id === attacker.id);
-          if (index !== -1) {
-            finalPlayerTeamFinal[index] = attackerDiseaseResult.updatedCreature;
-          }
-        } else {
-          const index = finalEnemyTeamFinal.findIndex(c => c.id === attacker.id);
-          if (index !== -1) {
-            finalEnemyTeamFinal[index] = attackerDiseaseResult.updatedCreature;
-          }
-        }
-        if (attackerDiseaseResult.log.length > 0) {
-          newLog.push(...attackerDiseaseResult.log);
-        }
-      }
-    }
-
-    // Update disease states and radioactive charges for the current attacker ONLY
-    if (attacker.owner === "player") {
-      const attackerIndex = finalPlayerTeamFinal.findIndex(c => c.id === attacker.id);
-      if (attackerIndex !== -1) {
-        let updatedAttacker = updateDiseases([finalPlayerTeamFinal[attackerIndex]])[0] as any;
-        
-        // Decrement radioactive charges
-        const currentCharges = updatedAttacker.radioactiveCharges || 0;
-        if (currentCharges > 0) {
-          const newCharges = currentCharges - 1;
-          updatedAttacker.radioactiveCharges = newCharges;
-          
-          if (newCharges === 0) {
-            newLog.push(`☢️ ${updatedAttacker.name} n'est plus contaminé par radiation!`);
-          } else {
-            newLog.push(`☢️ ${updatedAttacker.name}: ${newCharges} charges radioactives restantes`);
-          }
-        }
-        
-        finalPlayerTeamFinal[attackerIndex] = updatedAttacker;
-      }
-    } else {
-      const attackerIndex = finalEnemyTeamFinal.findIndex(c => c.id === attacker.id);
-      if (attackerIndex !== -1) {
-        let updatedAttacker = updateDiseases([finalEnemyTeamFinal[attackerIndex]])[0] as any;
-        
-        // Decrement radioactive charges
-        const currentCharges = updatedAttacker.radioactiveCharges || 0;
-        if (currentCharges > 0) {
-          const newCharges = currentCharges - 1;
-          updatedAttacker.radioactiveCharges = newCharges;
-          
-          if (newCharges === 0) {
-            newLog.push(`☢️ ${updatedAttacker.name} n'est plus contaminé par radiation!`);
-          } else {
-            newLog.push(`☢️ ${updatedAttacker.name}: ${newCharges} charges radioactives restantes`);
-          }
-        }
-        
-        finalEnemyTeamFinal[attackerIndex] = updatedAttacker;
-      }
-    }
-
-    setBattleState({
-      playerTeam: finalPlayerTeamFinal,
-      enemyTeam: finalEnemyTeamFinal,
-      turn: battleState.turn + 1,
-      log: newLog,
-      winner: newWinner,
-      turnOrder: battleState.turnOrder,
-      currentAttackerIndex: nextIndex
-    });
-
-    setIsProcessing(false);
+    return enemies;
   };
 
-  if (error) {
-    return (
-      <div className="min-h-screen bg-gray-900 text-white p-6">
-        <div className="max-w-2xl mx-auto text-center">
-          <h1 className="text-2xl font-bold text-red-500 mb-4">⚠️ Erreur</h1>
-          <p className="text-gray-300">{error}</p>
-        </div>
-      </div>
-    );
-  }
+  const enemyTeam = battleState?.enemyTeam || spawnRandomEnemyTeam();
 
-  if (!battleState) {
-    return <div className="min-h-screen bg-gray-900 text-white p-6">Chargement...</div>;
-  }
+  // Fonction pour initialiser la bataille
+  const initializeBattle = () => {
+    // Créer les personnages avec les stats
+    initializeBattleState(playerTeam, spawnRandomEnemyTeam());
+  };
 
-  const playerAlive = battleState.playerTeam.filter(c => c.currentHP > 0).length;
-  const enemyAlive = battleState.enemyTeam.filter(c => c.currentHP > 0).length;
-  const currentAttacker = getCurrentAttacker(battleState);
-
-  // Function to calculate AND apply damage for a specific creature during their turn
-  function applyDiseaseDamageForCreature(creature: Creature, teamLog: string[]): { damage: number; log: string[]; updatedCreature: Creature } {
-    const activeDiseases = creature.diseases.filter(d => d.remainingTurns > 0 && creature.currentHP > 0);
-    
-    if (activeDiseases.length === 0) {
-      return { damage: 0, log: [], updatedCreature: creature };
-    }
-    
-    const diseaseLog: string[] = [];
-    let totalDamage = 0;
-    
-    // Calculate charge bonus for THIS creature ONLY  
-    const chargeBonus = Math.min(30, (activeDiseases.length - 1) * 10);
-    
-    // Sum 25% of each disease pool
-    const diseasePoolSum = activeDiseases.reduce((sum, disease) => sum + disease.pool, 0);
-    const diseaseDamage = Math.floor(diseasePoolSum * 0.25);
-    const finalDamage = Math.floor(diseaseDamage * (100 + chargeBonus) / 100);
-    
-    if (finalDamage > 0) {
-      diseaseLog.push(
-        `☠️ ${creature.name}: ${activeDiseases.length} maladie${activeDiseases.length > 1 ? 's' : ''} → ${finalDamage} dégâts (${chargeBonus}% bonus)`
-      );
+  const initializeBattleState = (
+    players: any[], 
+    enemies: BattleCreature[]
+  ) => {
+    const playerCreatures: BattleCreature[] = players.map((c, i) => {
+      const stats = getEffectiveStats(c);
+      const hp = generateRealisticHP(stats);
       
-      totalDamage = finalDamage;
-    }
+      return {
+        id: c.id,
+        name: c.name,
+        creatureId: c.creatureId,
+        geneticType: c.geneticType || "resilient",
+        personality: c.personality || generateRandomPersonality(),
+        finalStats: stats,
+        level: c.level || c.customStats?.level || 1,
+        currentHP: hp,
+        maxHP: hp,
+        position: i + 1,
+        hasTriggeredSauvetage: false,
+        radioactiveCharges: 0,
+        diseases: []
+      };
+    });
+
+    // Définir l'ordre de tour en fonction de la vitesse
+    const allCreatures = [...playerCreatures, ...enemies];
+    const sortedCreatures = allCreatures.sort((a, b) => b.finalStats.speed - a.finalStats.speed);
     
-    // Apply damage ONLY (no disease state changes - will be handled by updateDiseases)
-    return { 
-      damage: totalDamage, 
-      log: diseaseLog, 
-      updatedCreature: {
-        ...creature,
-        currentHP: Math.max(0, creature.currentHP - totalDamage)
-        // diseases remain unchanged here
-      }
-    };
-  }
+    setBattleState({
+      playerTeam: playerCreatures,
+      enemyTeam: enemies,
+      turn: 1,
+      log: ["🎵 Début du combat!"],
+      winner: null,
+      turnOrder: sortedCreatures,
+      currentAttackerIndex: sortedCreatures.findIndex(c => playerCreatures.some(pc => pc.id === c.id))
+    });
+    
+    setCurrentAttacker(sortedCreatures[sortedCreatures.findIndex(c => playerCreatures.some(pc => pc.id === c.id))]);
+  };
+
+  // Compter les créatures vivantes
+  const playerAlive = battleState?.playerTeam.filter(c => c.currentHP > 0).length || 0;
+  const enemyAlive = battleState?.enemyTeam.filter(c => c.currentHP > 0).length || 0;
+
+  // TODO: Implémenter la logique de combat (processTurn, etc.)
+  const processTurn = () => {
+    if (isProcessing || !battleState) return;
+    
+    setIsProcessing(true);
+    
+    // Logique de combat à implémenter...
+    
+    setTimeout(() => {
+      setIsProcessing(false);
+    }, 1000);
+  };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-red-950 via-orange-950 to-purple-950 p-6">
-      <div className="max-w-7xl mx-auto">
-        <Link href="/arena/training" className="inline-block px-4 py-2 mb-4 bg-black/30 hover:bg-black/50 text-white rounded-lg transition-colors">
-          ← Retour
-        </Link>
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900 text-white p-4">
+      <div className="max-w-6xl mx-auto">
+        {/* Header */}
+        <div className="flex justify-between items-center mb-6">
+          <Link href="/arena" className="text-blue-400 hover:text-blue-300 transition-colors">
+            ← Retour à l'arène
+          </Link>
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+            ⚔️ Arène de Combat ⚔️
+          </h1>
+          <button
+            onClick={() => setShowLogs(!showLogs)}
+            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors"
+          >
+            📜 {showLogs ? 'Cacher' : 'Voir'} les logs
+          </button>
+        </div>
 
-        <h1 className="text-3xl font-bold text-white mb-6 text-center">⚔️ Combat</h1>
-
-        {battleState.winner && (
-          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-            <div className="bg-white dark:bg-gray-800 rounded-3xl p-12 text-center animate-[bounce_0.5s_ease-out]">
-              <h2 className={`text-6xl font-bold mb-4 ${battleState.winner === "player" ? "text-green-600" : "text-red-600"}`}>
-                {battleState.winner === "player" ? "🎉 VICTOIRE!" : "💀 DÉFAITE!"}
-              </h2>
-              {battleState.winner === "player" && (
-                <p className="text-xl text-gray-600 dark:text-gray-300 mb-6">Survivants: {playerAlive}/5</p>
-              )}
-              <Link href="/arena/training" className="inline-block px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white text-xl font-bold rounded-xl transition-all">
-                Continuer
-              </Link>
+        {/* État de la bataille */}
+        <div className="mb-6 p-4 bg-gray-800/50 rounded-xl backdrop-blur-sm border border-purple-500/30">
+          <div className="flex justify-between items-center">
+            <span className="text-blue-400 font-bold">
+              Tour {battleState?.turn || 1}
+            </span>
+            <div className="flex gap-4">
+              <span className="text-blue-400 text-sm">
+                Joueur: {playerAlive}/5 vivants
+              </span>
+              <span className="text-red-400 text-sm">
+                Ennemi: {enemyAlive}/5 vivants
+              </span>
             </div>
+            <span className="text-yellow-400 font-bold">
+              {battleState?.winner ? `Vainqueur: ${battleState.winner === 'player' ? 'Joueur' : 'Ennemi'}` : 'En cours...'}
+            </span>
           </div>
-        )}
+        </div>
 
-        <div className="bg-black/20 rounded-3xl p-6 backdrop-blur-sm">
-          <div className="text-center mb-4">
-            <span className="text-gray-300 text-xs">Tour {battleState.turn}</span>
-          </div>
-
-          <div className="flex justify-between mb-3 px-2">
-            <span className="text-blue-400 font-bold text-xs">TON ÉQUIPE ({playerAlive}/5)</span>
-            <span className="text-red-400 font-bold text-xs">ENNEMIS ({enemyAlive}/5)</span>
-          </div>
-
-          <div className="grid grid-cols-5 gap-x-4 mb-4">
-            <div className="col-span-2 flex flex-col gap-1.5">
-              {[...battleState.playerTeam]
-                .sort((a, b) => (a.position || 0) - (b.position || 0))
-                .map((creature) => {
-                  const isAttacker = currentAttacker?.id === creature.id;
-                  return (
-                <div
-                  key={creature.id}
-                  onClick={() => !battleState.winner && setSelectedCreature(creature)}
-                  className={`relative bg-gradient-to-br from-blue-900/90 to-blue-950 rounded-xl p-2.5 cursor-pointer transition-all hover:scale-105 shadow-lg border-2 ${
-                    creature.currentHP <= 0 
-                      ? "opacity-40 grayscale border-blue-500/30" 
-                      : isAttacker 
-                        ? "border-yellow-400 shadow-[0_0_20px_rgba(250,204,21,0.5)]" 
-                        : "border-blue-500/30"
-                  }`}
-                >
-                  {creature.currentHP <= 0 && (
-                    <div className="absolute inset-0 bg-black/50 rounded-xl flex items-center justify-center">
-                      <span className="text-xl">💀</span>
-                    </div>
-                  )}
-                  {damageNumbers.find(dn => dn.id === creature.id) && (
-                    <div className="absolute -top-1 left-1/2 -translate-x-1/2 text-lg font-bold text-red-500 animate-[float-up_1s_ease-out_forwards]">
-                      {damageNumbers.find(dn => dn.id === creature.id)?.damage}
-                    </div>
-                  )}
-
-                  <div className="absolute -top-1 -left-1 bg-yellow-500 text-white text-xs px-1 py-0.5 rounded-full font-bold">
-                    #{creature.position}
-                  </div>
-
-                  {isAttacker && creature.currentHP > 0 && (
-                    <div className="absolute -top-1 -right-1 bg-gradient-to-r from-yellow-400 to-orange-500 text-white text-xs px-1.5 py-0.5 rounded-full font-bold shadow-lg animate-[pulse_1s_ease-in-out_infinite]">
-                      JOUE
-                    </div>
-                  )}
-
-                  {/* Disease badge */}
-                  {creature.diseases.length > 0 && (
-                    <div className="absolute top-6 -right-1 bg-red-600 text-white text-xs px-1 py-0.5 rounded-full font-bold shadow-lg">
-                      ☠️ {creature.diseases.length}
-                    </div>
-                  )}
-
-                  <div className="flex items-center gap-2">
-                    <img
-                      src={getCreatureImage(creature.creatureId, creature.finalStats.rank, creature.geneticType)}
-                      alt={creature.name}
-                      className={`w-14 h-14 object-contain ${isAttacker && creature.currentHP > 0 ? "animate-[pulse_1s_ease-in-out_infinite]" : ""}`}
-                    />
-                    <div className="flex-1">
-                      <p className="text-white font-bold text-xs">{creature.name}</p>
-                      <div className="w-full bg-gray-900 rounded-full h-2 mt-1">
-                        <div
-                          className={`h-full rounded-full transition-all duration-300 ${
-                            creature.currentHP / creature.maxHP > 0.5
-                              ? "bg-gradient-to-r from-green-400 to-green-500"
-                              : creature.currentHP / creature.maxHP > 0.25
-                              ? "bg-gradient-to-r from-orange-400 to-orange-500"
-                              : "bg-gradient-to-r from-red-400 to-red-500"
-                          }`}
-                          style={{ width: `${(creature.currentHP / creature.maxHP) * 100}%` }}
-                        />
-                      </div>
-                      <div className="text-xs text-gray-300 mt-0.5">
-                        <span className={`${creature.currentHP / creature.maxHP > 0.5 ? "text-green-400" : creature.currentHP / creature.maxHP > 0.25 ? "text-orange-400" : "text-red-400"}`}>
-                          {creature.currentHP}/{creature.maxHP}
-                        </span>
-                      </div>
-                      <div className="text-xs text-gray-300 mt-0.5">
-                        <span className="text-cyan-400 capitalize">🔬 {creature.geneticType || 'unknown'}</span>
-                      </div>
-                      {(creature as any).radioactiveCharges && (creature as any).radioactiveCharges > 0 && (
-                        <div className="text-xs mt-0.5">
-                          <span className="text-green-400 font-bold">
-                            ☢️ {(creature as any).radioactiveCharges} charges
-                          </span>
-                          <span className="text-green-300 ml-1">
-                            ({(creature as any).radioactiveCharges * 10}%)
-                          </span>
-                        </div>
-                      )}
-                      {creature.personality && PERSONALITIES[creature.personality] && (
-                        <div className="text-xs text-gray-300 mt-0.5">
-                          <span className="text-purple-400">{getPersonalityEmoji(creature.personality)} {PERSONALITIES[creature.personality].name}</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="mt-1.5 pt-1.5 border-t border-blue-600/30">
-                    <div className="flex gap-1">
-                      <div className="w-6 h-6 bg-blue-600/30 rounded border border-blue-400/50 flex items-center justify-center text-blue-300 text-xs">+</div>
-                      {/* DEBUG: Commenting - to see if it causes 0 */}
-                      {/* <div className="w-6 h-6 bg-gray-600/30 rounded border border-gray-400/30 flex items-center justify-center text-gray-400 text-xs">-</div> */}
-                      {(creature as any).radioactiveCharges && (creature as any).radioactiveCharges > 0 && (
-                        <div 
-                          className="w-6 h-6 bg-green-600/30 rounded border border-green-400/50 flex items-center justify-center text-green-300 text-xs font-bold"
-                          title={`☢️ ${(creature as any).radioactiveCharges} charges (${(creature as any).radioactiveCharges * 10}% corruption)`}
-                        >
-                          ☢️
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )})}
-            </div>
-
-            <div className="col-span-1 flex items-center justify-center">
-              <div className="text-3xl animate-[pulse_2s_ease-in-out_infinite]">⚔️</div>
-            </div>
-
-            <div className="col-span-2 flex flex-col gap-1.5">
-              {[...battleState.enemyTeam]
-                .sort((a, b) => (a.position || 0) - (b.position || 0))
-                .map((creature) => {
-                  const isAttacker = currentAttacker?.id === creature.id;
-                  return (
-                <div
-                  key={creature.id}
-                  onClick={() => !battleState.winner && setSelectedCreature(creature)}
-                  className={`relative bg-gradient-to-br from-red-900/90 to-red-950 rounded-xl p-2.5 cursor-pointer transition-all hover:scale-105 shadow-lg border-2 ${
-                    creature.currentHP <= 0 
-                      ? "opacity-40 grayscale border-red-500/30" 
-                      : isAttacker 
-                        ? "border-yellow-400 shadow-[0_0_20px_rgba(250,204,21,0.5)]" 
-                        : "border-red-500/30"
-                  }`}
-                >
-                  {creature.currentHP <= 0 && (
-                    <div className="absolute inset-0 bg-black/50 rounded-xl flex items-center justify-center">
-                      <span className="text-xl">💀</span>
-                    </div>
-                  )}
-
-                  {isAttacker && creature.currentHP > 0 && (
-                    <div className="absolute -top-1 -left-1 bg-gradient-to-r from-yellow-400 to-orange-500 text-white text-xs px-1.5 py-0.5 rounded-full font-bold shadow-lg animate-[pulse_1s_ease-in-out_infinite]">
-                      JOUE
-                    </div>
-                  )}
-
-                  <div className="flex items-center gap-2 justify-end">
-                    <div className="flex-1 text-right">
-                      <p className="text-white font-bold text-xs">{creature.name}</p>
-                      <div className="w-full bg-gray-900 rounded-full h-2 mt-1 ml-auto">
-                        <div
-                          className={`h-full rounded-full transition-all duration-300 ${
-                            creature.currentHP / creature.maxHP > 0.5
-                              ? "bg-gradient-to-r from-green-400 to-green-500"
-                              : creature.currentHP / creature.maxHP > 0.25
-                              ? "bg-gradient-to-r from-orange-400 to-orange-500"
-                              : "bg-gradient-to-r from-red-400 to-red-500"
-                          }`}
-                          style={{ width: `${(creature.currentHP / creature.maxHP) * 100}%` }}
-                        />
-                      </div>
-                      <div className="text-xs text-gray-300 mt-0.5">
-                        <span className={`${creature.currentHP / creature.maxHP > 0.5 ? "text-green-400" : creature.currentHP / creature.maxHP > 0.25 ? "text-orange-400" : "text-red-400"}`}>
-                          {creature.currentHP}/{creature.maxHP}
-                        </span>
-                      </div>
-                      {creature.personality && PERSONALITIES[creature.personality] && (
-                        <div className="text-xs text-gray-300 mt-0.5">
-                          <span className="text-purple-400">{PERSONALITIES[creature.personality].name} {getPersonalityEmoji(creature.personality)}</span>
-                        </div>
-                      )}
-                      <div className="text-xs text-gray-300 mt-0.5">
-                        <span className="text-cyan-400 capitalize">🔬 {creature.geneticType || 'unknown'}</span>
-                      </div>
-                      {(creature as any).radioactiveCharges && (creature as any).radioactiveCharges > 0 && (
-                        <div className="text-xs mt-0.5">
-                          <span className="text-green-400 font-bold">
-                            ☢️ {(creature as any).radioactiveCharges}c
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                    <img
-                      src={getCreatureImage(creature.creatureId, creature.finalStats.rank, creature.geneticType)}
-                      alt={creature.name}
-                      className={`w-14 h-14 object-contain ${isAttacker && creature.currentHP > 0 ? "animate-[pulse_1s_ease-in-out_infinite]" : ""}`}
-                    />
-                    <div className="absolute -top-1 -right-1 bg-red-500 text-white text-xs px-1 py-0.5 rounded-full font-bold">
-                      #{creature.position}
-                    </div>
-
-                    {/* Disease badge for enemy */}
-                    {creature.diseases.length > 0 && (
-                      <div className="absolute top-6 -left-1 bg-red-600 text-white text-xs px-1 py-0.5 rounded-full font-bold shadow-lg">
-                        ☠️ {creature.diseases.length}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="mt-1.5 pt-1.5 border-t border-red-600/30">
-                    <div className="flex gap-1 justify-end">
-                      <div className="w-6 h-6 bg-gray-600/30 rounded border border-gray-400/30 flex items-center justify-center text-gray-400 text-xs">-</div>
-                      <div className="w-6 h-6 bg-red-600/30 rounded border border-red-400/50 flex items-center justify-center text-red-300 text-xs">-</div>
-                      {(creature as any).radioactiveCharges && (creature as any).radioactiveCharges > 0 && (
-                        <div 
-                          className="w-6 h-6 bg-green-600/30 rounded border border-green-400/50 flex items-center justify-center text-green-300 text-xs font-bold"
-                          title={`☢️ ${(creature as any).radioactiveCharges} charges (${(creature as any).radioactiveCharges * 10}% corruption)`}
-                        >
-                          ☢️
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )})}
-            </div>
-          </div>
-
-          {/* TEMP: Ajout de notre section propre */}
+        {/* Zone de combat */}
+        {battleState && (
           <BattleCleanSection 
             battleState={battleState}
             currentAttacker={currentAttacker}
             setSelectedCreature={setSelectedCreature}
             damageNumbers={damageNumbers}
           />
+        )}
 
-          {!battleState.winner && (
-            <div className="text-center">
-              <button
-                onClick={processTurn}
-                disabled={isProcessing}
-                className="px-12 py-4 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white text-xl font-bold rounded-2xl transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed shadow-xl"
-              >
-                {isProcessing ? "⚡ Attaque..." : "🗡️ ATTAQUER"}
-              </button>
-            </div>
-          )}
-
-          <div className="mt-8 pt-6 border-t border-gray-700">
-            <h3 className="text-gray-400 font-bold text-sm mb-3">JOURNAL DE COMBAT</h3>
-            <div className="bg-black/30 rounded-xl p-4 max-h-40 overflow-y-auto scroll-smooth">
-              <div className="space-y-1">
-                {battleState.log.slice(-10).map((entry, index) => (
-                  <p key={index} className="text-gray-300 text-sm">
-                    {entry}
-                  </p>
-                ))}
-              </div>
-            </div>
-          </div>
+        {/* Boutons de contrôle */}
+        <div className="flex justify-center gap-4 mt-6">
+          <button
+            onClick={processTurn}
+            disabled={isProcessing || !battleState || battleState.winner !== null}
+            className="px-8 py-3 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-bold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isProcessing ? '⚡ En cours...' : '🗡️ ATTAQUER'}
+          </button>
+          
+          <button
+            onClick={initializeBattle}
+            className="px-8 py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-bold rounded-xl transition-all"
+          >
+            🔄 Nouvelle Bataille
+          </button>
         </div>
 
+        {/* Logs de combat */}
+        {showLogs && (
+          <div className="mt-6 p-4 bg-black/50 rounded-xl max-h-60 overflow-y-auto">
+            <h3 className="text-yellow-400 font-bold mb-2">⚔️ Journal de Combat</h3>
+            <div className="space-y-1">
+              {battleState?.log.map((log, index) => (
+                <div key={index} className="text-sm text-gray-300">
+                  {log}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Modal de détails de créature */}
         {selectedCreature && (
           <div 
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-40"
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
             onClick={() => setSelectedCreature(null)}
           >
             <div 
-              className="bg-gray-800 dark:bg-gray-900 rounded-3xl p-6 max-w-md w-full mx-4 shadow-2xl max-h-[80vh] overflow-y-auto"
+              className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-2xl p-6 max-w-md w-full border border-purple-500/30"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="text-center mb-6">
-                <img
-                  src={getCreatureImage(selectedCreature.creatureId, selectedCreature.finalStats.rank, selectedCreature.geneticType)}
-                  alt={selectedCreature.name}
-                  className="w-32 h-32 mx-auto mb-4 object-contain"
-                />
-                <h3 className="text-3xl font-bold text-white">{selectedCreature.name}</h3>
-                {selectedCreature.position && (
-                  <span className="text-yellow-400 text-sm">Position #{selectedCreature.position}</span>
+              <h2 className="text-2xl font-bold mb-4">Détails de {selectedCreature.name}</h2>
+              
+              <div className="space-y-3">
+                <div>
+                  <span className="text-gray-400">Type Génétique:</span>
+                  <span className="ml-2 text-cyan-400">🔬 {selectedCreature.geneticType}</span>
+                </div>
+                
+                {selectedCreature.personality && (
+                  <div>
+                    <span className="text-gray-400">Personnalité:</span>
+                    <span className="ml-2 text-purple-400">
+                      {getPersonalityEmoji(selectedCreature.personality)} {PERSONALITIES[selectedCreature.personality]?.name}
+                    </span>
+                  </div>
                 )}
-                {selectedCreature.personality && PERSONALITIES[selectedCreature.personality] && (
-                  <p className="text-purple-400 text-sm mt-1">{getPersonalityEmoji(selectedCreature.personality)} {PERSONALITIES[selectedCreature.personality].name}</p>
-                )}
-              </div>
-
-              <div className="space-y-4 grid grid-cols-2 gap-3">
-                <div className="bg-gray-700 dark:bg-gray-800 rounded-xl p-3 text-center">
-                  <p className="text-gray-400 text-xs">HP</p>
-                  <p className="text-xl font-bold text-white">{selectedCreature.currentHP}</p>
-                  <p className="text-gray-500 text-xs">/ {selectedCreature.maxHP}</p>
+                
+                <div>
+                  <span className="text-gray-400">HP:</span>
+                  <span className={`ml-2 ${selectedCreature.currentHP / selectedCreature.maxHP > 0.5 ? 'text-green-400' : selectedCreature.currentHP / selectedCreature.maxHP > 0.25 ? 'text-orange-400' : 'text-red-400'}`}>
+                    {selectedCreature.currentHP}/{selectedCreature.maxHP}
+                  </span>
                 </div>
-                <div className="bg-gray-700 dark:bg-gray-800 rounded-xl p-3 text-center">
-                  <p className="text-gray-400 text-xs">ATK</p>
-                  <p className="text-xl font-bold text-white">{selectedCreature.finalStats.attack}</p>
-                </div>
-                <div className="bg-gray-700 dark:bg-gray-800 rounded-xl p-3 text-center">
-                  <p className="text-gray-400 text-xs">DEF</p>
-                  <p className="text-xl font-bold text-white">{selectedCreature.finalStats.defense}</p>
-                </div>
-                <div className="bg-gray-700 dark:bg-gray-800 rounded-xl p-3 text-center">
-                  <p className="text-gray-400 text-xs">SPD</p>
-                  <p className="text-xl font-bold text-white">{selectedCreature.finalStats.speed}</p>
-                </div>
-                <div className="bg-gray-700 dark:bg-gray-800 rounded-xl p-3 text-center">
-                  <p className="text-gray-400 text-xs">CRIT</p>
-                  <p className="text-xl font-bold text-white">{selectedCreature.finalStats.crit}</p>
-                </div>
-                <div className="bg-gray-700 dark:bg-gray-800 rounded-xl p-3 text-center">
-                  <p className="text-gray-400 text-xs">Rang</p>
-                  <p className="text-xl font-bold text-green-400">{selectedCreature.finalStats.rank}</p>
-                </div>
-                {/* Show genetic type in modal */}
-                <div className="bg-gray-700 dark:bg-gray-800 rounded-xl p-3 text-center col-span-2">
-                  <p className="text-gray-400 text-xs mb-1">Type Génétique</p>
-                  <p className="text-lg font-bold text-cyan-400 capitalize">🔬 {selectedCreature.geneticType || 'unknown'}</p>
-                </div>
-              </div>
-
-              {/* Show diseases if any */}
-              {selectedCreature.diseases.length > 0 && (
-                <div className="bg-gray-700 dark:bg-gray-800 rounded-xl p-4 mt-3">
-                  <h4 className="text-red-400 font-bold text-lg mb-2 flex items-center gap-2">
-                    ☠️ MALADIES ACTIVES ({selectedCreature.diseases.length})
-                  </h4>
-                  <div className="space-y-2 max-h-48 overflow-y-auto">
-                    {selectedCreature.diseases.map((disease, index) => {
-                      const damagePerTurn = Math.floor(disease.pool * 0.25);
-                      const totalRemaining = damagePerTurn * disease.remainingTurns;
-                      return (
-                        <div key={disease.id} className="bg-gray-600 rounded-lg p-2">
-                          <div className="flex justify-between items-start">
-                            <div className="flex-1">
-                              <p className="text-white text-sm font-semibold">
-                                Maladie #{index + 1}
-                              </p>
-                              <p className="text-gray-300 text-xs">
-                                Source: {disease.sourceCreatureName}
-                              </p>
-                            </div>
-                            <div className="text-right">
-                              <p className="text-red-400 text-sm font-bold">
-                                🗓️ {disease.remainingTurns}/4 tours
-                              </p>
-                            </div>
-                          </div>
-                          <div className="mt-1 grid grid-cols-2 gap-1 text-xs">
-                            <div>
-                              <span className="text-gray-400">Dmg/tour:</span>
-                              <span className="text-red-300 ml-1">{damagePerTurn} HP</span>
-                            </div>
-                            <div>
-                              <span className="text-gray-400">Restant:</span>
-                              <span className="text-red-300 ml-1">{totalRemaining} HP</span>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                    
-                    {/* Calculate and show current turn total damage */}
-                    {(() => {
-                      const activeDiseases = selectedCreature.diseases.filter(d => d.remainingTurns > 0);
-                      const chargeBonus = Math.min(30, (activeDiseases.length - 1) * 10);
-                      const poolSum = activeDiseases.reduce((sum, d) => sum + d.pool, 0);
-                      const diseaseDamage = Math.floor(poolSum * 0.25);
-                      const finalDamage = Math.floor(diseaseDamage * (100 + chargeBonus) / 100);
-                      return (
-                        <div className="bg-red-900/50 rounded-lg p-2 mt-2 border border-red-500/30">
-                          <div className="text-center">
-                            <p className="text-gray-300 text-xs">TOTAL CE TOUR</p>
-                            <p className="text-red-400 text-sm font-bold">
-                              {finalDamage} dégâts ({chargeBonus}% bonus)
-                            </p>
-                          </div>
-                        </div>
-                      );
-                    })()}
+                
+                <div>
+                  <span className="text-gray-400">Stats:</span>
+                  <div className="ml-2 text-gray-300">
+                    <div>ATK: {selectedCreature.finalStats.attack}</div>
+                    <div>DEF: {selectedCreature.finalStats.defense}</div>
+                    <div>VIT: {selectedCreature.finalStats.speed}</div>
+                    <div>CRIT: {selectedCreature.finalStats.crit}%</div>
                   </div>
                 </div>
-              )}
 
-              {/* Radioactive Charges */}
-              {(selectedCreature as any).radioactiveCharges && (selectedCreature as any).radioactiveCharges > 0 && (
-                <div className="bg-gray-700 dark:bg-gray-800 rounded-xl p-4">
-                  <h4 className="text-green-400 text-sm font-bold mb-3 flex items-center gap-2">
-                    ☢️ CONTAMINATION RADIOACTIVE ({(selectedCreature as any).radioactiveCharges})
-                  </h4>
-                  <div className="space-y-2">
-                    <div className="bg-green-900/50 rounded-lg p-2 border border-green-500/30">
-                      <div className="grid grid-cols-2 gap-2 text-center">
-                        <div>
-                          <p className="text-gray-400 text-xs">Charges actives</p>
-                          <p className="text-green-400 text-lg font-bold">{(selectedCreature as any).radioactiveCharges}</p>
-                        </div>
-                        <div>
-                          <p className="text-gray-400 text-xs">Corruption</p>
-                          <p className="text-green-400 text-lg font-bold">{(selectedCreature as any).radioactiveCharges * 10}%</p>
-                        </div>
-                      </div>
-                      <div className="mt-2 text-center">
-                        <p className="text-gray-400 text-xs">Chance d'attaquer un allié au prochain tour</p>
-                      </div>
-                    </div>
+                {selectedCreature.radioactiveCharges && selectedCreature.radioactiveCharges > 0 && (
+                  <div className="mt-3 p-3 bg-green-900/30 rounded-lg border border-green-500/50">
+                    <span className="text-green-400 font-bold">
+                      ☢️ Radioactif: {selectedCreature.radioactiveCharges} charges
+                    </span>
                   </div>
-                </div>
-              )}
-
+                )}
+              </div>
+              
               <button
                 onClick={() => setSelectedCreature(null)}
-                className="w-full mt-4 py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white text-lg font-bold rounded-xl transition-all"
+                className="mt-4 w-full px-4 py-2 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white font-bold rounded-lg transition-colors"
               >
                 Fermer
               </button>
@@ -1280,21 +404,6 @@ export default function BattlePage() {
           </div>
         )}
       </div>
-
-      <style jsx>{`
-        @keyframes float-up {
-          0% { opacity: 1; transform: translate(-50%, 0); }
-          100% { opacity: 0; transform: translate(-50%, -50px); }
-        }
-        @keyframes bounce {
-          0%, 100% { transform: scale(1); }
-          50% { transform: scale(1.1); }
-        }
-        @keyframes pulse {
-          0%, 100% { transform: scale(1); opacity: 1; }
-          50% { transform: scale(1.2); opacity: 0.7; }
-        }
-      `}</style>
     </div>
   );
 }
