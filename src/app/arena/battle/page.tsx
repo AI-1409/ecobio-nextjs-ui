@@ -205,8 +205,8 @@ export default function BattlePage() {
     enemies: BattleCreature[]
   ) => {
     const playerCreatures: BattleCreature[] = players.map((c, i) => {
-      const stats = getEffectiveStats(c);
-      const hp = generateRealisticHP(stats);
+      const stats = c.finalStats || c.customStats;
+      const hp = c.currentHP || c.maxHP || stats.hp;
       
       return {
         id: c.id,
