@@ -6,6 +6,7 @@ import { Rank, CREATURES, PERSONALITIES, PersonalityType, generateRandomPersonal
 import { rollRandomGeneticType } from "@/lib/genetic-types";
 import { getVarianceRange, BattleStats } from "@/lib/battle";
 import { SimpleCard } from "./CARD_TEMPLATE";
+import { BattleCleanSection } from "./BATTLE_CLEAN";
 import { rollRandomTraits, applyTraitStatModifiers } from "@/lib/traits";
 
 interface Disease {
