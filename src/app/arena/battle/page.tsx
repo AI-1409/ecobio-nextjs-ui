@@ -1090,6 +1090,14 @@ export default function BattlePage() {
             </div>
           </div>
 
+          {/* TEMP: Ajout de notre section propre */}
+          <BattleCleanSection 
+            battleState={battleState}
+            currentAttacker={currentAttacker}
+            setSelectedCreature={setSelectedCreature}
+            damageNumbers={damageNumbers}
+          />
+
           {!battleState.winner && (
             <div className="text-center">
               <button
