@@ -56,10 +56,9 @@ const spawnCreatureForBattle = (): BattleCreature => {
   const personality: PersonalityType = ["agressif", "protecteur", "rapide", "stratège", "précis", "mystérieux"][Math.floor(Math.random() * 6)] as PersonalityType;
   const geneticType = rollRandomGeneticType();
   
-  const baseStats = generateIndividualStats(rank as any);
-  const finalStats = getEffectiveStats({...baseStats, rank} as any);
+  const finalStats = generateIndividualStats(rank as any);
   
-  const hp = Math.floor(baseStats.hp * getRankMultiplier(rank));
+  const hp = finalStats.hp;
   
   return {
     id: `enemy-${Math.random().toString(36).substr(2, 9)}`,
