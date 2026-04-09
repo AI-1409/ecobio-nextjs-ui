@@ -6,7 +6,7 @@
 import { Creature, BaseStats, Rank, RANK_MULTIPLIERS } from "./database";
 import { applyTraits as applyTraitEffects, getTraitsByIds } from "./traits";
 import { calculateCombatXP } from "./combat-xp";
-import { Skill } from "./skills";
+import { Skill, BASE_SKILLS, SPECIMEN_SKILLS, getBaseSkill, getSpecimenSkill } from "./skills";
 import type { Skill as SkillType } from "./skills";
 import {
   getPersonalityBuff,
@@ -956,8 +956,7 @@ function convertToSkillFormat(
     return null;
   }
 
-  // Import skills dynamically to avoid circular dependency
-  const { BASE_SKILLS, SPECIMEN_SKILLS } = require("./skills");
+  // Use imported skills (circular dependency resolved via lazy access)
 
   // If this is a known personality skill, load directly from skills.ts (preserves effects like recoilPercent)
   if (source === "personality") {
@@ -1035,7 +1034,6 @@ function convertToSkillFormat(
       }
       // Tir Critique: COUP GARANTI - MUST be loaded from skills.ts to preserve ALL effects
       if (oldSkill.name === "Tir Critique") {
-        const { BASE_SKILLS } = require("./skills");
         return {
           ...BASE_SKILLS.précis,
           id: `${source}_${oldSkill.name}`,

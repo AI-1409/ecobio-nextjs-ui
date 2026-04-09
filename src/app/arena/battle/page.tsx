@@ -15,8 +15,21 @@ import {
   createBattleCreature,
   calculateScaledStats,
   generateIndividualStats,
-  getRankMultiplier
+  getRankMultiplier,
+  BattleTeam,
+  BattleElement,
+  BattleLogEntry,
+  BattleCreature,
+  tickCooldownsAndBuffs,
+  tickStatusEffects
 } from "@/lib/battle";
+import {
+  executeCreatureTurn,
+  isTeamBattleOver,
+  getTeamBattleWinner,
+  createBattleTeam,
+  getAllBattleElements
+} from "@/lib/battle-multi";
 
 /* === TYPES SIMPLES === */
 
@@ -28,14 +41,8 @@ interface Disease {
 
 /* === INTERFACE PROPRE === */
 
-interface BattleCreature {
-  id: string;
-  name: string;
-  currentHP: number;
+interface ExtendedBattleCreature extends BattleCreature {
   maxHP: number;
-  geneticType?: string;
-  personality?: PersonalityType;
-  position?: number;
   diseases: Disease[];
   radioactiveCharges?: number;
   finalStats: BattleStats;
@@ -46,6 +53,9 @@ interface BattleCreature {
   grand?: boolean;
   hostile?: boolean;
 }
+
+// Use the extended type for currentAttacker
+const [currentAttacker, setCurrentAttacker] = useState<ExtendedBattleCreature | null>(null);
 
 /* === FONCTIONS SIMPLIFIÉES === */
 
@@ -60,23 +70,32 @@ const spawnCreatureForBattle = (): BattleCreature => {
   
   const hp = finalStats.hp;
   
-  return {
+  // Créer l'objet Creature
+  const creatureObj = {
     id: `enemy-${Math.random().toString(36).substr(2, 9)}`,
     name: `Creature ${geneticType}`,
-    creatureId: 'housefly', // pour tests
+    rank,
+    baseStats,
+    desc: `Ennemi ${geneticType}`,
+    creatureId: 'housefly',
     geneticType,
     personality,
-    finalStats,
     level: 1,
-    currentHP: hp,
-    maxHP: hp,
-    diseases: [],
-    radioactiveCharges: 0,
-    hasTriggeredSauvetage: false,
-    relative: true,
-    grand: false,
-    hostile: true
+    traits: []
   };
+  
+  // Créer le BattleCreature avec la structure correcte
+  const battleCreature = createBattleCreature(
+    creatureObj,
+    finalStats,
+    `Creature ${geneticType}`,
+    [],
+    0
+  );
+  
+  battleCreature.currentHP = hp;
+  
+  return battleCreature;
 };
 
 // Fonction simple pour calculer la distance
@@ -98,12 +117,12 @@ const getCreatureImage = (creatureId: string, rank: string = "E", geneticType?: 
 };
 
 interface BattleState {
-  playerTeam: BattleCreature[];
-  enemyTeam: BattleCreature[];
+  playerTeam: BattleTeam;
+  enemyTeam: BattleTeam;
   turn: number;
-  log: string[];
-  winner: "player" | "enemy" | null;
-  turnOrder: BattleCreature[];
+  log: BattleLogEntry[];
+  winner: "player" | "enemy" | "draw" | null;
+  turnOrder: BattleElement[];
   currentAttackerIndex: number;
 }
 
@@ -130,8 +149,8 @@ const getPersonalityEmoji = (personality: PersonalityType): string => {
 
 function useBattleState() {
   const [battleState, setBattleState] = useState<BattleState | null>(null);
-  const [currentAttacker, setCurrentAttacker] = useState<BattleCreature | null>(null);
-  const [selectedCreature, setSelectedCreature] = useState<BattleCreature | null>(null);
+  const [currentAttacker, setCurrentAttacker] = useState<ExtendedBattleCreature | null>(null);
+  const [selectedCreature, setSelectedCreature] = useState<ExtendedBattleCreature | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [damageNumbers, setDamageNumbers] = useState<DamageNumber[]>([]);
   const [showLogs, setShowLogs] = useState(false);
@@ -177,10 +196,17 @@ export default function BattlePage() {
     }
   }, []);
 
-  // Équipe des joueurs depuis localStorage
-  const playerTeam = (typeof window !== 'undefined' && localStorage.getItem('battleTeam')) 
-    ? JSON.parse(localStorage.getItem('battleTeam') || '[]')
-    : [];
+  // IDs de l'équipe depuis sessionStorage, puis charger les créatures complètes
+  const getSelectedCreatures = () => {
+    if (typeof window === 'undefined') return [];
+    
+    const selectedIds = JSON.parse(sessionStorage.getItem('battle-team') || '[]');
+    const collection = JSON.parse(localStorage.getItem('ecobio-collection') || '[]');
+    
+    return selectedIds
+      .map((id: string) => collection.find((c: any) => c.id === id))
+      .filter(Boolean);
+  };
 
   // Création équipe ennemie aléatoire (5 créatures)
   const spawnRandomEnemyTeam = (): BattleCreature[] => {
@@ -192,71 +218,212 @@ export default function BattlePage() {
     return enemies;
   };
 
-  const enemyTeam = battleState?.enemyTeam || spawnRandomEnemyTeam();
-
   // Fonction pour initialiser la bataille
   const initializeBattle = () => {
+    const selectedCreatureObjects = getSelectedCreatures();
     // Créer les personnages avec les stats
-    initializeBattleState(playerTeam, spawnRandomEnemyTeam());
+    initializeBattleState(selectedCreatureObjects, spawnRandomEnemyTeam());
   };
 
   const initializeBattleState = (
-    players: any[], 
-    enemies: BattleCreature[]
+    playerObjects: any[], 
+    enemyObjects: BattleCreature[]
   ) => {
-    const playerCreatures: BattleCreature[] = players.map((c, i) => {
-      const stats = c.finalStats || c.customStats;
-      const hp = c.currentHP || c.maxHP || stats.hp;
-      
-      return {
+    // Créer les configurations des équipes
+    const playerConfigs = playerObjects.map((c, i) => ({
+      creatureTemplate: {
         id: c.id,
         name: c.name,
-        creatureId: c.creatureId,
+        rank: c.rank || c.finalStats?.rank || "E" as Rank,
+        baseStats: c.baseStats || {
+          hp: c.customStats?.hp || 100,
+          attack: c.customStats?.attack || 10,
+          defense: c.customStats?.defense || 10,
+          speed: c.customStats?.speed || 10,
+          crit: c.customStats?.crit || 5
+        },
+        desc: `Créature de combat: ${c.name}`,
+        creatureId: c.creatureId || "unknown",
         geneticType: c.geneticType || "resilient",
         personality: c.personality || generateRandomPersonality(),
-        finalStats: stats,
         level: c.level || c.customStats?.level || 1,
-        currentHP: hp,
-        maxHP: hp,
-        position: i + 1,
-        hasTriggeredSauvetage: false,
-        radioactiveCharges: 0,
-        diseases: []
-      };
+        traits: c.traits || []
+      },
+      stats: getEffectiveStats(c),
+      name: c.name,
+      traits: c.traits || []
+    }));
+    
+    const enemyConfigs = enemyObjects.map((creature, i) => ({
+      creatureTemplate: {
+        id: creature.id,
+        name: creature.name,
+        rank: "E" as Rank,
+        baseStats: {
+          hp: 100,
+          attack: creature.finalStats.attack,
+          defense: creature.finalStats.defense,
+          speed: creature.finalStats.speed,
+          crit: creature.finalStats.crit
+        },
+        desc: `Ennemi: ${creature.name}`,
+        creatureId: creature.creatureId || "unknown",
+        geneticType: creature.geneticType || "resilient",
+        personality: creature.personality || generateRandomPersonality(),
+        level: creature.level || 1,
+        traits: []
+      },
+      stats: creature.finalStats,
+      name: creature.name,
+      traits: []
+    }));
+    
+    const playerTeam = createBattleTeam(playerConfigs, "player");
+    const enemyTeam = createBattleTeam(enemyConfigs, "enemy");
+    
+    // Ajouter les propriétés de compatibilité pour les créatures
+    [...playerTeam.creatures, ...enemyTeam.creatures].forEach(creature => {
+      const isPlayer = playerTeam.creatures.includes(creature);
+      const originalObject = isPlayer ? 
+        playerObjects.find(c => c.id === creature.id) :
+        enemyObjects.find(c => c.id === creature.id);
+      
+      if (originalObject) {
+        Object.assign(creature, {
+          creatureId: originalObject.creatureId || "unknown",
+          geneticType: originalObject.geneticType || "resilient",
+          level: originalObject.level || originalObject.customStats?.level || 1,
+          maxHP: creature.stats.hp,
+          finalStats: creature.stats,
+          hasTriggeredSauvetage: false,
+          radioactiveCharges: 0,
+          diseases: []
+        });
+      }
     });
-
-    // Définir l'ordre de tour en fonction de la vitesse
-    const allCreatures = [...playerCreatures, ...enemies];
-    const sortedCreatures = allCreatures.sort((a, b) => b.finalStats.speed - a.finalStats.speed);
+    
+    // Définir l'ordre de tour avec tous les éléments
+    const allElements = getAllBattleElements(playerTeam, enemyTeam);
     
     setBattleState({
-      playerTeam: playerCreatures,
-      enemyTeam: enemies,
+      playerTeam,
+      enemyTeam,
       turn: 1,
-      log: ["🎵 Début du combat!"],
+      log: [{ text: "⚔️ Début du combat!", type: "info" }],
       winner: null,
-      turnOrder: sortedCreatures,
-      currentAttackerIndex: sortedCreatures.findIndex(c => playerCreatures.some(pc => pc.id === c.id))
+      turnOrder: allElements,
+      currentAttackerIndex: allElements.findIndex(el => el.team === "player")
     });
     
-    setCurrentAttacker(sortedCreatures[sortedCreatures.findIndex(c => playerCreatures.some(pc => pc.id === c.id))]);
+    // Définir le premier attaquant
+    const firstAttacker = allElements[allElements.findIndex(el => el.team === "player")];
+    setCurrentAttacker(firstAttacker?.creature as ExtendedBattleCreature || null);
   };
 
   // Compter les créatures vivantes
-  const playerAlive = battleState?.playerTeam.filter(c => c.currentHP > 0).length || 0;
-  const enemyAlive = battleState?.enemyTeam.filter(c => c.currentHP > 0).length || 0;
+  const playerAlive = battleState?.playerTeam.creatures.filter(c => c.currentHP > 0).length || 0;
+  const enemyAlive = battleState?.enemyTeam.creatures.filter(c => c.currentHP > 0).length || 0;
 
-  // TODO: Implémenter la logique de combat (processTurn, etc.)
+  // Exécuter un tour de combat
   const processTurn = () => {
-    if (isProcessing || !battleState) return;
+    if (isProcessing || !battleState || battleState.winner) return;
     
     setIsProcessing(true);
     
-    // Logique de combat à implémenter...
-    
-    setTimeout(() => {
+    try {
+      const currentElement = battleState.turnOrder[battleState.currentAttackerIndex];
+      
+      if (!currentElement || !currentElement.creature || currentElement.creature.currentHP <= 0) {
+        // Passer au tour suivant si la créature est morte
+        advanceTurn();
+        return;
+      }
+
+      // Exécuter le tour de la créature actuelle
+      const logEntries = executeCreatureTurn(
+        currentElement.creature,
+        battleState.playerTeam,
+        battleState.enemyTeam,
+        currentElement.team === "enemy", // Auto pour les ennemis
+        5 // Team size 5v5
+      );
+      
+      // Ajouter les logs
+      const updatedLog = [...battleState.log, ...logEntries];
+      
+      // Appliquer les ticks de cooldown/buffs/status
+      const updatedPlayerCreatures = battleState.playerTeam.creatures.map(creature => {
+        tickCooldownsAndBuffs(creature);
+        return creature;
+      });
+      const updatedEnemyCreatures = battleState.enemyTeam.creatures.map(creature => {
+        tickCooldownsAndBuffs(creature);
+        return creature;
+      });
+      
+      const updatedPlayerTeam = { ...battleState.playerTeam, creatures: updatedPlayerCreatures };
+      const updatedEnemyTeam = { ...battleState.enemyTeam, creatures: updatedEnemyCreatures };
+      
+      tickStatusEffects(updatedPlayerCreatures, updatedLog);
+      tickStatusEffects(updatedEnemyCreatures, updatedLog);
+      
+      // Vérifier si le combat est terminé
+      const battleOver = isTeamBattleOver(updatedPlayerTeam, updatedEnemyTeam);
+      const winner = battleOver ? getTeamBattleWinner(updatedPlayerTeam, updatedEnemyTeam) : null;
+      
+      // Mettre à jour l'état
+      setBattleState({
+        ...battleState,
+        playerTeam: updatedPlayerTeam,
+        enemyTeam: updatedEnemyTeam,
+        log: updatedLog,
+        winner
+      });
+      
+      // Si le combat n'est pas terminé, passer au tour suivant
+      if (!battleOver) {
+        setTimeout(() => {
+          advanceTurn();
+        }, 1500); // Délai pour l'animation
+      } else {
+        setIsProcessing(false);
+      }
+      
+    } catch (error) {
+      console.error("Erreur lors du tour:", error);
       setIsProcessing(false);
-    }, 1000);
+    }
+  };
+  
+  // Passer au tour suivant
+  const advanceTurn = () => {
+    if (!battleState) return;
+    
+    // Trouver le prochain attaquant vivant
+    let nextIndex = (battleState.currentAttackerIndex + 1) % battleState.turnOrder.length;
+    let attempts = 0;
+    
+    while (attempts < battleState.turnOrder.length) {
+      const element = battleState.turnOrder[nextIndex];
+      if (element?.creature?.currentHP > 0) {
+        // Vérifier si c'est un nouveau tour complet
+        const isNewRound = nextIndex < battleState.currentAttackerIndex;
+        
+        setBattleState({
+          ...battleState,
+          turn: isNewRound ? battleState.turn + 1 : battleState.turn,
+          currentAttackerIndex: nextIndex
+        });
+        
+        const newAttacker = element.creature as ExtendedBattleCreature;
+        setCurrentAttacker(newAttacker);
+        break;
+      }
+      nextIndex = (nextIndex + 1) % battleState.turnOrder.length;
+      attempts++;
+    }
+    
+    setIsProcessing(false);
   };
 
   return (
@@ -293,7 +460,12 @@ export default function BattlePage() {
               </span>
             </div>
             <span className="text-yellow-400 font-bold">
-              {battleState?.winner ? `Vainqueur: ${battleState.winner === 'player' ? 'Joueur' : 'Ennemi'}` : 'En cours...'}
+              {battleState?.winner ? 
+                (battleState.winner === 'player' ? '🏆 Victoire Joueur!' : 
+                 battleState.winner === 'enemy' ? '💀 Victoire Ennemi!' : 
+                 '🤝 Match Nul!') : 
+                '⚔️ En cours...'
+              }
             </span>
           </div>
         </div>
@@ -301,7 +473,11 @@ export default function BattlePage() {
         {/* Zone de combat */}
         {battleState && (
           <BattleCleanSection 
-            battleState={battleState}
+            battleState={{
+              ...battleState,
+              playerTeam: battleState.playerTeam.creatures,
+              enemyTeam: battleState.enemyTeam.creatures
+            }}
             currentAttacker={currentAttacker}
             setSelectedCreature={setSelectedCreature}
             damageNumbers={damageNumbers}
@@ -331,9 +507,9 @@ export default function BattlePage() {
           <div className="mt-6 p-4 bg-black/50 rounded-xl max-h-60 overflow-y-auto">
             <h3 className="text-yellow-400 font-bold mb-2">⚔️ Journal de Combat</h3>
             <div className="space-y-1">
-              {battleState?.log.map((log, index) => (
+              {battleState?.log.map((logEntry, index) => (
                 <div key={index} className="text-sm text-gray-300">
-                  {log}
+                  {typeof logEntry === 'string' ? logEntry : logEntry.text}
                 </div>
               ))}
             </div>

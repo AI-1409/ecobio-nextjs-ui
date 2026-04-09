@@ -1,6 +1,14 @@
 pre-push:
   parallel: false
   commands:
+    test-run:
+      run: npm run test:run
+      glob: "*.{ts,tsx}"
+      exclude:
+        - "node_modules/**"
+        - ".next/**"
+        - "out/**"
+        - "ecobio-dev/**"
     build-check:
       run: cd ecobio-dev && npm run build
       glob: "*.{ts,tsx,js,jsx}"
