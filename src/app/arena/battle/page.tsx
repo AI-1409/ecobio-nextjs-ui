@@ -4,9 +4,10 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Rank, CREATURES, PERSONALITIES, PersonalityType, generateRandomPersonality, applyLevelScaling } from "@/lib/database";
 import { rollRandomGeneticType } from "@/lib/genetic-types";
-import { getVarianceRange, BattleStats } from "@/lib/battle";
+import { getVarianceRange, BattleStats, generateIndividualStats } from "@/lib/battle";
 import { SimpleCard } from "./CARD_TEMPLATE";
 import { BattleCleanSection } from "./BATTLE_CLEAN";
+import { getGeneticType } from "@/lib/genetic-types";
 
 // Imports des fonctions battle
 import {
@@ -14,7 +15,6 @@ import {
   calculateFinalStats,
   createBattleCreature,
   calculateScaledStats,
-  generateIndividualStats,
   getRankMultiplier,
   BattleTeam,
   BattleElement,
@@ -57,48 +57,55 @@ interface ExtendedBattleCreature extends BattleCreature {
 
 /* === FONCTIONS SIMPLIFIÉES === */
 
-// Fonction simple pour créer une créature aléatoire
+// Fonction améliorée pour créer une créature aléatoire
 const spawnCreatureForBattle = (): BattleCreature => {
-  // Générer une créature aléatoire simple
-  const rank: Rank = Math.random() < 0.95 ? "E" : Math.random() < 0.98 ? "D" : Math.random() < 0.99 ? "C" : Math.random() < 0.997 ? "B" : "A";
-  const personality: PersonalityType = ["agressif", "protecteur", "rapide", "stratège", "précis", "mystérieux"][Math.floor(Math.random() * 6)] as PersonalityType;
+  // Liste des créatures disponibles
+  const creatureIds = ["ravaryn", "polyops", "gravaille", "maworm", "cornegrive", "oxydrabe", "verdogre"];
+  const creatureId = creatureIds[Math.floor(Math.random() * creatureIds.length)];
+  const baseCreature = CREATURES[creatureId];
+
+  // RNG rang avec distribution réaliste
+  const rand = Math.random();
+  let rank: Rank;
+  if (rand < 0.4) rank = "E";
+  else if (rand < 0.7) rank = "D";
+  else if (rand < 0.88) rank = "C";
+  else if (rand < 0.97) rank = "B";
+  else if (rand < 0.995) rank = "A";
+  else if (rand < 0.999) rank = "S";
+  else rank = "S+";
+
+  // RNG personnalité
+  const personalities: PersonalityType[] = ["agressif", "protecteur", "rapide", "stratège", "précis", "mystérieux"];
+  const personality = personalities[Math.floor(Math.random() * personalities.length)];
+
+  // RNG type génétique
   const geneticType = rollRandomGeneticType();
-  
-  const finalStats = generateIndividualStats(rank as any);
-  
+
+  // Génération de stats avec variance
+  const finalStats = generateIndividualStats(baseCreature.baseStats, rank);
   const hp = finalStats.hp;
-  
-  // Créer l'objet Creature
-  const creatureObj = {
-    id: `enemy-${Math.random().toString(36).substr(2, 9)}`,
-    name: `Creature ${geneticType}`,
-    rank,
-    baseStats: finalStats,
-    desc: `Ennemi ${geneticType}`,
-    creatureId: 'housefly',
-    geneticType,
-    personality,
-    level: 1,
-    traits: []
-  };
-  
-  // Créer le BattleCreature avec la structure correcte
+
+  // Création du BattleCreature
   const battleCreature = createBattleCreature(
-    creatureObj,
+    baseCreature,
     finalStats,
-    `Creature ${geneticType}`,
+    baseCreature.name,
     [],
     0
   );
   
   battleCreature.currentHP = hp;
-  
+  (battleCreature as any).creatureId = creatureId;
+  (battleCreature as any).geneticType = geneticType;
+  (battleCreature as any).level = 1;
+
   return battleCreature;
 };
 
 // Fonction simple pour calculer la distance
 const calculateDistance = (_attacker: BattleCreature, _defender: BattleCreature): number => {
-  return 1; // Distance simple pour le moment
+  return 1;
 };
 
 // Fonction simple pour générer HP réaliste
@@ -110,8 +117,11 @@ const generateRealisticHP = (stats: any): number => {
 
 // Fonction simple pour les images de créatures
 const getCreatureImage = (creatureId: string, rank: string = "E", geneticType?: string): string => {
-  // Pour le moment, retourne une image par défaut
-  return "/ecobio-nextjs-ui/creatures/unknown.png";
+  if (geneticType && creatureId === "ravaryn") {
+    const normalizedType = geneticType.toLowerCase().replace("é", "e").replace("è", "e");
+    return `/ecobio-nextjs-ui/images/creatures/ravaryn_${normalizedType}_e.png`;
+  }
+  return `/ecobio-nextjs-ui/images/creatures/unknown.png`;
 };
 
 interface BattleState {
@@ -219,7 +229,6 @@ export default function BattlePage() {
   // Fonction pour initialiser la bataille
   const initializeBattle = () => {
     const selectedCreatureObjects = getSelectedCreatures();
-    // Créer les personnages avec les stats
     initializeBattleState(selectedCreatureObjects, spawnRandomEnemyTeam());
   };
 
@@ -228,12 +237,12 @@ export default function BattlePage() {
     enemyObjects: BattleCreature[]
   ) => {
     // Créer les configurations des équipes
-    const playerConfigs = playerObjects.map((c, i) => ({
+    const playerConfigs = playerObjects.map((c) => ({
       creatureTemplate: {
         id: c.id,
         name: c.name,
         rank: c.rank || c.finalStats?.rank || "E" as Rank,
-        baseStats: c.baseStats || {
+        baseStats: c.baseStats || c.finalStats || {
           hp: c.customStats?.hp || 100,
           attack: c.customStats?.attack || 10,
           defense: c.customStats?.defense || 10,
@@ -241,7 +250,7 @@ export default function BattlePage() {
           crit: c.customStats?.crit || 5
         },
         desc: `Créature de combat: ${c.name}`,
-        creatureId: c.creatureId || "unknown",
+        creatureId: c.creatureId || c.creatureId || "unknown",
         geneticType: c.geneticType || "resilient",
         personality: c.personality || generateRandomPersonality(),
         level: c.level || c.customStats?.level || 1,
@@ -252,23 +261,26 @@ export default function BattlePage() {
       traits: c.traits || []
     }));
     
-    const enemyConfigs = enemyObjects.map((creature, i) => ({
-      creatureTemplate: {
-        id: creature.id,
+    const enemyConfigs = enemyObjects.map((creature, i) => {
+      const creatureAny = creature as any;
+      return {
+        creatureTemplate: {
+          id: creature.id,
+          name: creature.name,
+          rank: (creature.stats?.rank || "E") as Rank,
+          baseStats: creature.stats,
+          desc: `Ennemi: ${creature.name}`,
+          creatureId: creatureAny.creatureId || "unknown",
+          geneticType: creatureAny.geneticType || "resilient",
+          personality: creatureAny.personality || generateRandomPersonality(),
+          level: creatureAny.level || 1,
+          traits: []
+        },
+        stats: creature.stats,
         name: creature.name,
-        rank: "E" as Rank,
-        baseStats: creature.stats,
-        desc: `Ennemi: ${creature.name}`,
-        creatureId: (creature as any).creature?.creatureId || "unknown",
-        geneticType: (creature as any).creature?.geneticType || "resilient",
-        personality: (creature as any).creature?.personality || generateRandomPersonality(),
-        level: (creature as any).creature?.level || 1,
         traits: []
-      },
-      stats: creature.stats,
-      name: creature.name,
-      traits: []
-    }));
+      };
+    });
     
     const playerTeam = createBattleTeam(playerConfigs, "player");
     const enemyTeam = createBattleTeam(enemyConfigs, "enemy");
@@ -326,24 +338,20 @@ export default function BattlePage() {
       const currentElement = battleState.turnOrder[battleState.currentAttackerIndex];
       
       if (!currentElement || !currentElement.creature || currentElement.creature.currentHP <= 0) {
-        // Passer au tour suivant si la créature est morte
         advanceTurn();
         return;
       }
 
-      // Exécuter le tour de la créature actuelle
       const logEntries = executeCreatureTurn(
         currentElement.creature,
         battleState.playerTeam,
         battleState.enemyTeam,
-        currentElement.team === "enemy", // Auto pour les ennemis
-        5 // Team size 5v5
+        currentElement.team === "enemy",
+        5
       );
       
-      // Ajouter les logs
       const updatedLog = [...battleState.log, ...logEntries];
       
-      // Appliquer les ticks de cooldown/buffs/status
       const updatedPlayerCreatures = battleState.playerTeam.creatures.map(creature => {
         tickCooldownsAndBuffs(creature);
         return creature;
@@ -359,11 +367,9 @@ export default function BattlePage() {
       updatedPlayerCreatures.forEach(creature => tickStatusEffects(creature, updatedLog));
       updatedEnemyCreatures.forEach(creature => tickStatusEffects(creature, updatedLog));
       
-      // Vérifier si le combat est terminé
       const battleOver = isTeamBattleOver(updatedPlayerTeam, updatedEnemyTeam);
       const winner = battleOver ? getTeamBattleWinner(updatedPlayerTeam, updatedEnemyTeam) : null;
       
-      // Mettre à jour l'état
       setBattleState({
         ...battleState,
         playerTeam: updatedPlayerTeam,
@@ -372,11 +378,10 @@ export default function BattlePage() {
         winner
       });
       
-      // Si le combat n'est pas terminé, passer au tour suivant
       if (!battleOver) {
         setTimeout(() => {
           advanceTurn();
-        }, 1500); // Délai pour l'animation
+        }, 1500);
       } else {
         setIsProcessing(false);
       }
@@ -387,18 +392,15 @@ export default function BattlePage() {
     }
   };
   
-  // Passer au tour suivant
   const advanceTurn = () => {
     if (!battleState) return;
     
-    // Trouver le prochain attaquant vivant
     let nextIndex = (battleState.currentAttackerIndex + 1) % battleState.turnOrder.length;
     let attempts = 0;
     
     while (attempts < battleState.turnOrder.length) {
       const element = battleState.turnOrder[nextIndex];
       if (element?.creature?.currentHP > 0) {
-        // Vérifier si c'est un nouveau tour complet
         const isNewRound = nextIndex < battleState.currentAttackerIndex;
         
         setBattleState({
@@ -523,7 +525,12 @@ export default function BattlePage() {
               <div className="space-y-3">
                 <div>
                   <span className="text-gray-400">Type Génétique:</span>
-                  <span className="ml-2 text-cyan-400">🔬 {selectedCreature.geneticType}</span>
+                  <span className="ml-2 text-cyan-400">
+                    {(() => {
+                      const gt = getGeneticType((selectedCreature.geneticType || "resilient") as any);
+                      return gt ? `${gt.emoji} ${gt.name}` : (selectedCreature.geneticType || "unknown");
+                    })()}
+                  </span>
                 </div>
                 
                 {selectedCreature.personality && (
