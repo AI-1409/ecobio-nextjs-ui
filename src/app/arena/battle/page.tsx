@@ -73,7 +73,7 @@ const spawnCreatureForBattle = (): BattleCreature => {
     id: `enemy-${Math.random().toString(36).substr(2, 9)}`,
     name: `Creature ${geneticType}`,
     rank,
-    baseStats,
+    baseStats: finalStats,
     desc: `Ennemi ${geneticType}`,
     creatureId: 'housefly',
     geneticType,

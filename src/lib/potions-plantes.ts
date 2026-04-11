@@ -33,7 +33,7 @@ export const HEALING_PLANTS = {
     id: "plantain_leaf",
     name: "Feuille de plantain",
     effects: { healing: "low" },
-    burarity: "common",
+    rarity: "common",
     description: "Feuille arbre, pouvoir calmant et adoucissant"
   },
   
@@ -48,15 +48,14 @@ export const HEALING_PLANTS = {
   
   yarrow_root: {
     id: "yarrow_root",
-    name: "Racine de grande achillée", 
+    name: "Racine de grande achillée",
     effects: { healing: "medium" },
     rarity: "uncommon",
-    valrarity: "uncommon",
     description: "Purifie le sang, réduction toxique"
   },
   
   echinacea_purpurea: {
-    id: "echinacea_purepurea",
+    id: "echinacea_purpurea",
     name: "Échinacée",
     effects: { healing: "medium" },
     rarity: "uncommon",
@@ -83,7 +82,7 @@ export const HEALING_PLANTS = {
   dragon_blood: {
     id: "dragon_blood",
     name: "Sang de dragon",
-    effects: { "high" },
+    effects: { healing: "high" },
     rarity: "legendary",
     description: "Sacrée de créature légendaire, régénération quasi-miraculeuse"
   },
