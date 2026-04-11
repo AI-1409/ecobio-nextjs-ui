@@ -48,14 +48,12 @@ interface ExtendedBattleCreature extends BattleCreature {
   finalStats: BattleStats;
   level: number;
   creatureId: string;
+  geneticType?: string;
   hasTriggeredSauvetage?: boolean;
   relative?: boolean;
   grand?: boolean;
   hostile?: boolean;
 }
-
-// Use the extended type for currentAttacker
-const [currentAttacker, setCurrentAttacker] = useState<ExtendedBattleCreature | null>(null);
 
 /* === FONCTIONS SIMPLIFIÉES === */
 
@@ -259,21 +257,15 @@ export default function BattlePage() {
         id: creature.id,
         name: creature.name,
         rank: "E" as Rank,
-        baseStats: {
-          hp: 100,
-          attack: creature.finalStats.attack,
-          defense: creature.finalStats.defense,
-          speed: creature.finalStats.speed,
-          crit: creature.finalStats.crit
-        },
+        baseStats: creature.stats,
         desc: `Ennemi: ${creature.name}`,
-        creatureId: creature.creatureId || "unknown",
-        geneticType: creature.geneticType || "resilient",
-        personality: creature.personality || generateRandomPersonality(),
-        level: creature.level || 1,
+        creatureId: (creature as any).creature?.creatureId || "unknown",
+        geneticType: (creature as any).creature?.geneticType || "resilient",
+        personality: (creature as any).creature?.personality || generateRandomPersonality(),
+        level: (creature as any).creature?.level || 1,
         traits: []
       },
-      stats: creature.finalStats,
+      stats: creature.stats,
       name: creature.name,
       traits: []
     }));
@@ -364,8 +356,8 @@ export default function BattlePage() {
       const updatedPlayerTeam = { ...battleState.playerTeam, creatures: updatedPlayerCreatures };
       const updatedEnemyTeam = { ...battleState.enemyTeam, creatures: updatedEnemyCreatures };
       
-      tickStatusEffects(updatedPlayerCreatures, updatedLog);
-      tickStatusEffects(updatedEnemyCreatures, updatedLog);
+      updatedPlayerCreatures.forEach(creature => tickStatusEffects(creature, updatedLog));
+      updatedEnemyCreatures.forEach(creature => tickStatusEffects(creature, updatedLog));
       
       // Vérifier si le combat est terminé
       const battleOver = isTeamBattleOver(updatedPlayerTeam, updatedEnemyTeam);

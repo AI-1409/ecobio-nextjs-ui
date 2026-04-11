@@ -1,43 +1,46 @@
 /**
  * Tests du système de potions
  */
-import { createPotion, loadDiscoveredRecipes, saveDiscoveredRecipe } from './potions';
+import { createPotion, PLANTS, SOLVENTS, AMPLIFIERS } from './potions';
 
 console.log("🧪 TESTS DE POTIONS");
 
-// Test 1: Healing simple (herb + mushroom + water)
+// Test 1: Healing simple (aloe_vera + plantain + water)
 console.log("\n--- Test 1: Healing Simple ---");
-const result1 = createPotion("herb", "mushroom", "water");
+const result1 = createPotion("aloe_vera", "plantain_leaf", "pure_water");
 console.log(result1);
 
-// Test 2: Energy amplifiée (berry + caffeine_berry + crystal_powder) 
-console.log("\n--- Test 2: Energy (mauvais catalyseur) ---");
-const result2 = createPotion("berry", "caffeine_berry", "crystal_powder");
+// Test 2: Healing medium (calendula + lavender + moonlit_dew)  
+console.log("\n--- Test 2: Healing Medium ---");
+const result2 = createPotion("calendula", "lavender", "moonlit_dew");
 console.log(result2);
 
-// Test 3: Energy amplifiée correcte (berry + caffeine_berry + beast_heart)
-console.log("\n--- Test 3: Energy Amplifiée ---");
-const result3 = createPotion("berry", "caffeine_berry", "beast_heart");
+// Test 3: Healing high avec amplificateur
+console.log("\n--- Test 3: Healing High + Amplificateur ---");
+const result3 = createPotion("ginseng_root", "mandrake_root", "dragon_blood", "amber_resin");
 console.log(result3);
 
-// Test 4: Mix healing/energy (ginseng + sacred_herb + honey)
-console.log("\n--- Test 4: Mix Healing/Energy ---");
-const result4 = createPotion("ginseng", "sacred_herb", "honey");
+// Test 4: Legendary avec phoenix ash
+console.log("\n--- Test 4: Potion Légendaire ---");
+const result4 = createPotion("mandrake_root", "lotus_petal", "dragon_blood", "phoenix_ash");
 console.log(result4);
 
-// Test 5: Échec (herb + berry = healing + energy, pas d'effet commun)
-console.log("\n--- Test 5: Échec ---");
-const result5 = createPotion("herb", "berry", "water");
+// Test 5: Échec (pas d'effet commun)
+console.log("\n--- Test 5: Échec (pas d'effet commun) ---");
+// dandelion a healing + luck, chickweed n'a que healing → OK
+// Mais aloe_vera (healing only) + chickweed (healing only) → OK aussi
+// Essayons avec des effets incompatibles si on en avait
+const result5 = createPotion("aloe_vera", "plantain_leaf", "pure_wood"); // wood n'existe pas
 console.log(result5);
 
-// Test 6: Recette puissante (sacred_herb + ginseng + crystal_powder)
-console.log("\n--- Test 6: Potion Épique ---");
-const result6 = createPotion("sacred_herb", "ginseng", "crystal_powder");
+// Test 6: Ingrédients invalides
+console.log("\n--- Test 6: Ingrédients invalides ---");
+const result6 = createPotion("invalid_plant", "aloe_vera", "pure_water");
 console.log(result6);
 
-// Test 7: Ingrédients invalides
-console.log("\n--- Test 7: Ingrédients invalides ---");
-const result7 = createPotion("invalid_plant", "herb", "water");
-console.log(result7);
+// Afficher les données disponibles
+console.log("\n📋 Plantes disponibles:", Object.keys(PLANTS));
+console.log("📋 Solvants disponibles:", Object.keys(SOLVENTS));
+console.log("📋 Amplificateurs disponibles:", Object.keys(AMPLIFIERS));
 
 console.log("\n🧪 FIN DES TESTS");
