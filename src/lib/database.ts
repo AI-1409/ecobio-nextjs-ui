@@ -4,6 +4,7 @@ export interface BaseStats {
   defense: number;
   speed: number;
   crit: number;
+  rank?: Rank;  // Add rank for compatibility
 }
 
 export type SkillTargetType = "front" | "back" | "all" | "random" | "self" | "ally";
@@ -386,18 +387,19 @@ export function applyLevelScaling(
 
   // Mystérieux: RANDOM stat gets 3.5% scaling each level
   if (personality === "mystérieux") {
-    const stats: (keyof BaseStats)[] = ["hp", "attack", "defense", "speed", "crit"];
+    const stats: Array<keyof Omit<BaseStats, "rank">> = ["hp", "attack", "defense", "speed", "crit"];
     // Deterministic random based on level (same level = same stat)
     const randomStat = stats[level % stats.length];
-    
-    const result = {
+
+    const result: BaseStats = {
       hp: baseStats.hp,
       attack: baseStats.attack,
       defense: baseStats.defense,
       speed: baseStats.speed,
       crit: baseStats.crit,
+      rank: baseStats.rank,
     };
-    
+
     // Apply 3.5% scaling to RANDOM stat only
     const multiplier = 1 + levelFactor * personalityDef.scalingMultipliers.hp; // All mysterieuse muls are 0.035
     result[randomStat] = Math.floor(baseStats[randomStat] * multiplier);
@@ -411,7 +413,8 @@ export function applyLevelScaling(
     attack: Math.floor(baseStats.attack * (1 + levelFactor * personalityDef.scalingMultipliers.attack)),
     defense: Math.floor(baseStats.defense * (1 + levelFactor * personalityDef.scalingMultipliers.defense)),
     speed: Math.floor(baseStats.speed * (1 + levelFactor * personalityDef.scalingMultipliers.speed)),
-    crit: Math.floor(baseStats.crit * (1 + levelFactor * personalityDef.scalingMultipliers.crit))
+    crit: Math.floor(baseStats.crit * (1 + levelFactor * personalityDef.scalingMultipliers.crit)),
+    rank: baseStats.rank
   };
 }
 
