@@ -1,5 +1,16 @@
 import { SimpleCard } from "./CARD_TEMPLATE";
 
+// Helper to transform BattleCreature to SimpleCard interface
+const transformBattleCreature = (creature: any): any => ({
+  id: creature.id,
+  name: creature.name,
+  currentHP: creature.currentHP || creature.stats?.hp || 100,
+  maxHP: creature.maxHP || creature.stats?.hp || 100,
+  geneticType: (creature as any).geneticType,
+  personality: creature.personality || (creature.baseCreature as any)?.personality,
+  finalStats: creature.stats || creature.finalStats || {}
+});
+
 export function BattleCleanSection({ battleState, currentAttacker, setSelectedCreature, damageNumbers }: any) {
   return (
     <div className="grid grid-cols-5 gap-x-4 mb-4">
@@ -9,12 +20,12 @@ export function BattleCleanSection({ battleState, currentAttacker, setSelectedCr
           .sort((a: any, b: any) => (a.position || 0) - (b.position || 0))
           .map((creature: any) => {
             const isAttacker = currentAttacker?.id === creature.id;
-            const damage = damageNumbers.find((dn: any) => dn.id === creature.id)?.damage;
-            
+            const transformedCreature = transformBattleCreature(creature);
+
             return (
               <SimpleCard
                 key={creature.id}
-                creature={creature}
+                creature={transformedCreature}
                 isAttacker={isAttacker}
                 onClick={() => !battleState.winner && setSelectedCreature(creature)}
                 teamColor="blue"
@@ -34,12 +45,12 @@ export function BattleCleanSection({ battleState, currentAttacker, setSelectedCr
           .sort((a: any, b: any) => (a.position || 0) - (b.position || 0))
           .map((creature: any) => {
             const isAttacker = currentAttacker?.id === creature.id;
-            const damage = damageNumbers.find((dn: any) => dn.id === creature.id)?.damage;
-            
+            const transformedCreature = transformBattleCreature(creature);
+
             return (
               <SimpleCard
                 key={creature.id}
-                creature={creature}
+                creature={transformedCreature}
                 isAttacker={isAttacker}
                 onClick={() => !battleState.winner && setSelectedCreature(creature)}
                 teamColor="red"
