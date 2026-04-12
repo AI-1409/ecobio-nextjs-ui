@@ -35,8 +35,20 @@ export function SimpleCard({ creature, isAttacker, onClick, teamColor }: {
         hpLow: "text-red-300"
       };
 
-  const hpPercent = creature.currentHP / creature.maxHP;
+  // Safety: Prevent division by zero or undefined
+  const safeMaxHP = creature.maxHP || 1;
+  const safeCurrentHP = creature.currentHP || 0;
+  const hpPercent = safeCurrentHP / safeMaxHP;
   const hpColor = hpPercent > 0.5 ? colors.hpHigh : hpPercent > 0.25 ? colors.hpMed : colors.hpLow;
+
+  console.log("[SimpleCard] Rendering creature:", {
+    id: creature.id,
+    name: creature.name,
+    currentHP: creature.currentHP,
+    maxHP: creature.maxHP,
+    hpPercent,
+    finalStats: creature.finalStats
+  });
 
   return (
     <div

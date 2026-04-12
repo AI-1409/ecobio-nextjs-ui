@@ -64,6 +64,33 @@ const spawnCreatureForBattle = (): BattleCreature => {
   const creatureId = creatureIds[Math.floor(Math.random() * creatureIds.length)];
   const baseCreature = CREATURES[creatureId];
 
+  // Safety check: creature exists
+  if (!baseCreature) {
+    console.error(`[spawnCreature] Creature not found for ID: ${creatureId}`, {
+      creatureId,
+      availableIds: Object.keys(CREATURES)
+    });
+
+    // Fallback: use first available creature
+    const fallbackId = Object.keys(CREATURES)[0];
+    if (!fallbackId || !CREATURES[fallbackId]) {
+      throw new Error("No valid creatures found in CREATURES database!");
+    }
+    return spawnCreatureForBattleForId(fallbackId);
+  }
+
+  return spawnCreatureForBattleForId(creatureId);
+};
+
+// Helper to spawn specific creature by ID
+const spawnCreatureForBattleForId = (creatureId: string): BattleCreature => {
+  const baseCreature = CREATURES[creatureId];
+
+  if (!baseCreature) {
+    console.error(`[spawnCreature] Creature not found for ID: ${creatureId}`);
+    throw new Error(`Creature ID ${creatureId} not found in CREATURES`);
+  }
+
   // RNG rang avec distribution réaliste
   const rand = Math.random();
   let rank: Rank;
@@ -94,7 +121,7 @@ const spawnCreatureForBattle = (): BattleCreature => {
     [],
     0
   );
-  
+
   battleCreature.currentHP = hp;
   (battleCreature as any).creatureId = creatureId;
   (battleCreature as any).geneticType = geneticType;
@@ -466,16 +493,29 @@ export default function BattlePage() {
 
         {/* Zone de combat */}
         {battleState && (
-          <BattleCleanSection 
-            battleState={{
-              ...battleState,
-              playerTeam: battleState.playerTeam.creatures,
-              enemyTeam: battleState.enemyTeam.creatures
-            }}
-            currentAttacker={currentAttacker}
-            setSelectedCreature={setSelectedCreature}
-            damageNumbers={damageNumbers}
-          />
+          (() => {
+            console.log("[page.tsx] About to render BattleCleanSection with:", {
+              hasBattleState: !!battleState,
+              playerTeam: battleState.playerTeam,
+              playerTeamCreatures: battleState.playerTeam?.creatures,
+              enemyTeam: battleState.enemyTeam,
+              enemyTeamCreatures: battleState.enemyTeam?.creatures,
+              playerTeamType: typeof battleState.playerTeam,
+              playerTeamCreaturesType: typeof battleState.playerTeam?.creatures
+            });
+            return (
+              <BattleCleanSection
+                battleState={{
+                  ...battleState,
+                  playerTeam: battleState.playerTeam.creatures,
+                  enemyTeam: battleState.enemyTeam.creatures
+                }}
+                currentAttacker={currentAttacker}
+                setSelectedCreature={setSelectedCreature}
+                damageNumbers={damageNumbers}
+              />
+            );
+          })()
         )}
 
         {/* Boutons de contrôle */}
