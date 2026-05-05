@@ -507,8 +507,8 @@ export default function BattlePage() {
               <BattleCleanSection
                 battleState={{
                   ...battleState,
-                  playerTeam: battleState.playerTeam.creatures,
-                  enemyTeam: battleState.enemyTeam.creatures
+                  playerTeam: battleState.playerTeam,
+                  enemyTeam: battleState.enemyTeam
                 }}
                 currentAttacker={currentAttacker}
                 setSelectedCreature={setSelectedCreature}

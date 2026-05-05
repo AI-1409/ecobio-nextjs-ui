@@ -89,13 +89,23 @@ export function SimpleCard({ creature, isAttacker, onClick, teamColor }: {
         </div>
       )}
 
-      {/* Stats compact */}
-      <div className="grid grid-cols-2 gap-1 text-xs text-gray-400">
-        <div>ATK: <span className="text-white font-semibold">{creature.finalStats?.attack || 0}</span></div>
-        <div>DEF: <span className="text-white font-semibold">{creature.finalStats?.defense || 0}</span></div>
-        <div>VIT: <span className="text-white font-semibold">{creature.finalStats?.speed || 0}</span></div>
-        <div>CRIT: <span className="text-white font-semibold">{creature.finalStats?.crit || 0}%</span></div>
-      </div>
+      {/* Stats compact - only show if > 0 */}
+      {(creature.finalStats?.attack > 0 || creature.finalStats?.defense > 0 || creature.finalStats?.speed > 0 || creature.finalStats?.crit > 0) && (
+        <div className="grid grid-cols-2 gap-1 text-xs text-gray-400">
+          {creature.finalStats?.attack > 0 && (
+            <div>ATK: <span className="text-white font-semibold">{creature.finalStats.attack}</span></div>
+          )}
+          {creature.finalStats?.defense > 0 && (
+            <div>DEF: <span className="text-white font-semibold">{creature.finalStats.defense}</span></div>
+          )}
+          {creature.finalStats?.speed > 0 && (
+            <div>VIT: <span className="text-white font-semibold">{creature.finalStats.speed}</span></div>
+          )}
+          {creature.finalStats?.crit > 0 && (
+            <div>CRIT: <span className="text-white font-semibold">{creature.finalStats.crit}%</span></div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

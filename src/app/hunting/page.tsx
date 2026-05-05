@@ -321,15 +321,15 @@ function feedCreature(creature: HuntedCreature, foodXP: number): { creature: Hun
 function getCreatureImage(creatureId: string, rank: Rank, geneticType?: string): string {
   if (creatureId === "housefly") {
     const rankSuffix = rank === "S+" ? "S+" : rank;
-    return `/ecobio-nextjs-ui/creatures/fly-rank-${rankSuffix}.png`;
+    return `/ecobio-nextjs-ui/images/creatures/fly-rank-${rankSuffix}.png`;
   }
   if (creatureId === "ant") {
     const rankSuffix = rank === "S+" ? "S+" : rank;
-    return `/ecobio-nextjs-ui/creatures/ant_rank_${rankSuffix}.png`;
+    return `/ecobio-nextjs-ui/images/creatures/ant_rank_${rankSuffix}.png`;
   }
   if (creatureId === "honeybee") {
     const rankSuffix = rank === "S+" ? "S+" : rank;
-    return `/ecobio-nextjs-ui/creatures/bee-rank-${rankSuffix}.png`;
+    return `/ecobio-nextjs-ui/images/creatures/bee-rank-${rankSuffix}.png`;
   }
   if (creatureId === "spider_mutant") {
     return "/ecobio-nextjs-ui/images/creatures/spider_mutant_e.png";
