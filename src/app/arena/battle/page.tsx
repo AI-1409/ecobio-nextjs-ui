@@ -236,7 +236,11 @@ export default function BattlePage() {
     if (typeof window === 'undefined') return [];
     
     const selectedIds = JSON.parse(sessionStorage.getItem('battle-team') || '[]');
-    const collection = JSON.parse(localStorage.getItem('ecobio-collection') || '[]');
+    const collection = JSON.parse(
+      typeof localStorage !== 'undefined' 
+        ? localStorage.getItem('ecobio-collection') || '[]'
+        : '[]'
+    );
     
     return selectedIds
       .map((id: string) => collection.find((c: any) => c.id === id))

@@ -437,6 +437,8 @@ export default function HuntingPage() {
   const [showRemedySelector, setShowRemedySelector] = useState<HuntedCreature | null>(null); // NEW: Remedy selector modal
 
   useEffect(() => {
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') return;
+    
     const saved = localStorage.getItem("ecobio-collection");
     if (saved) {
       try {
@@ -506,7 +508,7 @@ export default function HuntingPage() {
           c.currentHP !== migrated[i].currentHP ||
           c.lastHealTime !== migrated[i].lastHealTime
         );
-        if (hpChanged) {
+        if (hpChanged && typeof localStorage !== 'undefined') {
           localStorage.setItem("ecobio-collection", JSON.stringify(regenerated));
           console.log("Health regeneration applied and saved");
         }
@@ -542,6 +544,7 @@ export default function HuntingPage() {
   };
 
   useEffect(() => {
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') return;
     if (collection.length > 0) {
       localStorage.setItem("ecobio-collection", JSON.stringify(collection));
     } else {
@@ -724,7 +727,9 @@ export default function HuntingPage() {
 
     // Save updates
     setCollection(updatedCollection);
-    localStorage.setItem("ecobio-collection", JSON.stringify(updatedCollection));
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem("ecobio-collection", JSON.stringify(updatedCollection));
+    }
 
     // Dispatch inventory update event
     window.dispatchEvent(new Event("inventory-updated"));
