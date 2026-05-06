@@ -287,12 +287,14 @@ export function executeCreatureTurn(
   }
 
   // For auto-play (AI), choose an action with position-aware targeting
-  if (isAuto) {
-    const targetTeam = isPlayerCreature ? enemyTeam : playerTeam;
-    const allyTeam = isPlayerCreature ? playerTeam : enemyTeam;
+  // Also applies to player creatures without manual UI (fallback to auto-attack)
+  const targetTeam = isPlayerCreature ? enemyTeam : playerTeam;
+  const allyTeam = isPlayerCreature ? playerTeam : enemyTeam;
 
+  let usedSkill = false;
+
+  if (isAuto) {
     // AI uses specimen AND personality skills with dual-skill system
-    let usedSkill = false;
     const specimenSkill = activeCreature.creature.specimenSkill;
     const personalitySkill = activeCreature.creature.personalitySkill;
 
@@ -395,6 +397,12 @@ export function executeCreatureTurn(
       if (target) {
         executeAttack(activeCreature, target, log);
       }
+    }
+  } else {
+    // Player manual turn: fallback to auto-attack until manual UI is implemented
+    const target = selectTargetByPosition(activeCreature, targetTeam, teamSize, "front");
+    if (target) {
+      executeAttack(activeCreature, target, log);
     }
   }
 
