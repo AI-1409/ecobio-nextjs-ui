@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'export',
+  basePath: '/ecobio-nextjs-ui',
   images: {
     unoptimized: true,
   },
