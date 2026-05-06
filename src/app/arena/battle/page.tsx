@@ -235,7 +235,11 @@ export default function BattlePage() {
   const getSelectedCreatures = () => {
     if (typeof window === 'undefined') return [];
     
-    const selectedIds = JSON.parse(localStorage.getItem('battle-team') || '[]');
+    const selectedIds = JSON.parse(
+      typeof localStorage !== 'undefined'
+        ? localStorage.getItem('battle-team') || '[]'
+        : '[]'
+    );
     const collection = JSON.parse(
       typeof localStorage !== 'undefined' 
         ? localStorage.getItem('ecobio-collection') || '[]'
