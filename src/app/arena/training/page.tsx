@@ -146,8 +146,10 @@ export default function TrainingPage() {
   const handleStartBattle = () => {
     const activeSlots = selectedIds.filter(id => id !== null) as string[];
     if (activeSlots.length === 5) {
-      // Store team order in sessionStorage (positions 1-5 preserved)
-      sessionStorage.setItem("battle-team", JSON.stringify(activeSlots));
+      // Store team order in localStorage (persists across navigation)
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem("battle-team", JSON.stringify(activeSlots));
+      }
       router.push("/arena/battle");
     }
   };

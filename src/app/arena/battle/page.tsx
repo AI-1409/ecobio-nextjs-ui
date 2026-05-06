@@ -231,11 +231,11 @@ export default function BattlePage() {
     }
   }, []);
 
-  // IDs de l'équipe depuis sessionStorage, puis charger les créatures complètes
+  // IDs de l'équipe depuis localStorage, puis charger les créatures complètes
   const getSelectedCreatures = () => {
     if (typeof window === 'undefined') return [];
     
-    const selectedIds = JSON.parse(sessionStorage.getItem('battle-team') || '[]');
+    const selectedIds = JSON.parse(localStorage.getItem('battle-team') || '[]');
     const collection = JSON.parse(
       typeof localStorage !== 'undefined' 
         ? localStorage.getItem('ecobio-collection') || '[]'
