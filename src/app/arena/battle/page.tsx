@@ -438,29 +438,36 @@ export default function BattlePage() {
   const advanceTurn = () => {
     if (!battleState) return;
     
-    let nextIndex = (battleState.currentAttackerIndex + 1) % battleState.turnOrder.length;
-    let attempts = 0;
-    
-    while (attempts < battleState.turnOrder.length) {
-      const element = battleState.turnOrder[nextIndex];
-      if (element?.creature?.currentHP > 0) {
-        const isNewRound = nextIndex < battleState.currentAttackerIndex;
-        
-        setBattleState({
-          ...battleState,
-          turn: isNewRound ? battleState.turn + 1 : battleState.turn,
-          currentAttackerIndex: nextIndex
-        });
-        
-        const newAttacker = element.creature as ExtendedBattleCreature;
-        setCurrentAttacker(newAttacker);
-        break;
+    setBattleState(prev => {
+      if (!prev) return prev;
+      
+      let nextIndex = (prev.currentAttackerIndex + 1) % prev.turnOrder.length;
+      let attempts = 0;
+      
+      while (attempts < prev.turnOrder.length) {
+        const element = prev.turnOrder[nextIndex];
+        if (element?.creature?.currentHP > 0) {
+          const isNewRound = nextIndex < prev.currentAttackerIndex;
+          
+          const newState = {
+            ...prev,
+            turn: isNewRound ? prev.turn + 1 : prev.turn,
+            currentAttackerIndex: nextIndex
+          };
+          
+          const newAttacker = element.creature as ExtendedBattleCreature;
+          setCurrentAttacker(newAttacker);
+          
+          setIsProcessing(false);
+          return newState;
+        }
+        nextIndex = (nextIndex + 1) % prev.turnOrder.length;
+        attempts++;
       }
-      nextIndex = (nextIndex + 1) % battleState.turnOrder.length;
-      attempts++;
-    }
-    
-    setIsProcessing(false);
+      
+      setIsProcessing(false);
+      return prev;
+    });
   };
 
   // Show error message if no team selected
