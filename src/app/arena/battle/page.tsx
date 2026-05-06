@@ -251,6 +251,10 @@ export default function BattlePage() {
       .filter(Boolean);
   };
 
+  // Check if player has creatures selected (early return if not)
+  const playerSelectedCreatures = typeof window !== 'undefined' ? getSelectedCreatures() : [];
+  const hasNoTeam = playerSelectedCreatures.length === 0 && typeof window !== 'undefined';
+
   // Création équipe ennemie aléatoire (5 créatures)
   const spawnRandomEnemyTeam = (): BattleCreature[] => {
     const enemies: BattleCreature[] = [];
@@ -458,6 +462,21 @@ export default function BattlePage() {
     
     setIsProcessing(false);
   };
+
+  // Show error message if no team selected
+  if (hasNoTeam) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900 text-white p-4">
+        <div className="max-w-2xl mx-auto text-center mt-20">
+          <h1 className="text-3xl font-bold mb-6 text-red-400">⚠️ Aucune équipe sélectionnée</h1>
+          <p className="text-gray-300 mb-8">Vous devez sélectionner des créatures depuis l'arène avant de lancer un combat.</p>
+          <Link href="/arena" className="px-8 py-3 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-bold rounded-xl transition-all">
+            ← Retour à l'arène
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900 text-white p-4">
