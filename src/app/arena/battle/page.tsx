@@ -268,29 +268,33 @@ export default function BattlePage() {
     enemyObjects: BattleCreature[]
   ) => {
     // Créer les configurations des équipes
-    const playerConfigs = playerObjects.map((c) => ({
-      creatureTemplate: {
-        id: c.id,
-        name: c.name,
-        rank: c.rank || c.finalStats?.rank || "E" as Rank,
-        baseStats: c.baseStats || c.finalStats || {
-          hp: c.customStats?.hp || 100,
-          attack: c.customStats?.attack || 10,
-          defense: c.customStats?.defense || 10,
-          speed: c.customStats?.speed || 10,
-          crit: c.customStats?.crit || 5
+    const playerConfigs = playerObjects.map((c) => {
+      // Ensure we have complete stats fallback
+      const stats = c.finalStats || c.customStats || c.baseStats || {hp: 500, attack: 100, defense: 100, speed: 100, crit: 5};
+      return {
+        creatureTemplate: {
+          id: c.id,
+          name: c.name,
+          rank: c.rank || stats.rank || "E" as Rank,
+          baseStats: c.baseStats || c.finalStats || {
+            hp: c.customStats?.hp || stats.hp || 500,
+            attack: c.customStats?.attack || stats.attack || 100,
+            defense: c.customStats?.defense || stats.defense || 100,
+            speed: c.customStats?.speed || stats.speed || 100,
+            crit: c.customStats?.crit || stats.crit || 5
+          },
+          desc: `Créature de combat: ${c.name}`,
+          creatureId: c.creatureId || c.creatureId || "unknown",
+          geneticType: c.geneticType || "resilient",
+          personality: c.personality || generateRandomPersonality(),
+          level: c.level || c.customStats?.level || 1,
+          traits: c.traits || []
         },
-        desc: `Créature de combat: ${c.name}`,
-        creatureId: c.creatureId || c.creatureId || "unknown",
-        geneticType: c.geneticType || "resilient",
-        personality: c.personality || generateRandomPersonality(),
-        level: c.level || c.customStats?.level || 1,
+        stats: stats,
+        name: c.name,
         traits: c.traits || []
-      },
-      stats: getEffectiveStats(c),
-      name: c.name,
-      traits: c.traits || []
-    }));
+      };
+    });
     
     const enemyConfigs = enemyObjects.map((creature, i) => {
       const creatureAny = creature as any;
